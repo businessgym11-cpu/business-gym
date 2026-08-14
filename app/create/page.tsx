@@ -12,25 +12,16 @@ import {
   Download,
   Rocket,
   Check,
+  Wand2,
+  Loader2,
 } from "lucide-react";
+import { generateScript } from "./actions";
 
 const steps = [
   { id: 1, label: "대본 기획" },
   { id: 2, label: "AI 모션 매칭" },
   { id: 3, label: "최종 렌더링" },
 ];
-
-const dummyScript = `[3초 훅]
-"혹시 요즘 뭘 해도 잘 안 풀리시나요? 사실 이유가 있습니다."
-
-[전개]
-올해 당신의 사주에는 '역마살'이 강하게 들어와 있어요. 그래서 한 곳에 정착하지 못하고 계속 흔들리는 느낌을 받으셨을 거예요.
-
-[공감]
-하지만 역마살은 나쁜 것이 아니에요. 오히려 지금이 새로운 기회를 잡을 최적의 타이밍이라는 신호랍니다.
-
-[CTA]
-당신의 사주에 숨겨진 진짜 메시지가 궁금하다면? 프로필 링크를 확인해보세요.`;
 
 const scenes = [
   {
@@ -103,19 +94,72 @@ function StepOneScript({
   setScript: (v: string) => void;
   onNext: () => void;
 }) {
+  const [keyword, setKeyword] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleGenerate = async () => {
+    if (!keyword.trim()) {
+      setError("키워드를 입력해주세요.");
+      return;
+    }
+
+    setGenerating(true);
+    setError("");
+
+    const result = await generateScript(keyword.trim());
+
+    if (!result.success) {
+      setError(result.error);
+      setGenerating(false);
+      return;
+    }
+
+    setScript(result.script);
+    setGenerating(false);
+  };
+
   return (
     <div>
       <p className="text-sm text-slate-500">
-        분석된 떡상 구조를 바탕으로 AI가 작성한 초안입니다. 자유롭게
-        수정하세요.
+        키워드를 입력하면 AI가 떡상 구조 대본을 만들어드려요. 생성 후
+        자유롭게 수정하세요.
       </p>
 
-      <div className="mt-6 rounded-2xl border border-slate-200 transition-all duration-200 focus-within:border-purple-400 focus-within:ring-2 focus-within:ring-purple-500/40">
+      <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+        <input
+          type="text"
+          value={keyword}
+          onChange={(e) => setKeyword(e.target.value)}
+          placeholder="예: 30대 이직운, 재물운"
+          className="w-full rounded-xl border border-slate-200 px-4 py-3 text-slate-800 placeholder:text-slate-400 transition-all duration-200 focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+        />
+        <button
+          type="button"
+          onClick={handleGenerate}
+          disabled={generating}
+          className="flex flex-shrink-0 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-blue-500 px-5 py-3 text-sm font-bold text-white shadow-md shadow-purple-500/20 transition-all duration-200 hover:scale-[1.03] disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {generating ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Wand2 className="h-4 w-4" />
+          )}
+          AI 대본 생성
+        </button>
+      </div>
+
+      {error && (
+        <p className="mt-2 text-sm font-medium text-red-500">{error}</p>
+      )}
+
+      <div className="mt-4 rounded-2xl border border-slate-200 transition-all duration-200 focus-within:border-purple-400 focus-within:ring-2 focus-within:ring-purple-500/40">
         <textarea
           value={script}
           onChange={(e) => setScript(e.target.value)}
           rows={14}
-          className="w-full resize-none rounded-2xl bg-transparent p-5 leading-relaxed text-slate-700 focus:outline-none"
+          placeholder="위에서 키워드를 입력하고 'AI 대본 생성'을 누르면 여기에 대본이 채워져요."
+          className="w-full resize-none rounded-2xl bg-transparent p-5 leading-relaxed text-slate-700 placeholder:text-slate-400 focus:outline-none"
         />
       </div>
 
@@ -123,7 +167,8 @@ function StepOneScript({
         <button
           type="button"
           onClick={onNext}
-          className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-blue-500 px-6 py-3.5 font-bold text-white shadow-lg shadow-purple-500/30 transition-all duration-200 hover:scale-105 hover:shadow-xl active:scale-100"
+          disabled={!script.trim()}
+          className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-blue-500 px-6 py-3.5 font-bold text-white shadow-lg shadow-purple-500/30 transition-all duration-200 hover:scale-105 hover:shadow-xl active:scale-100 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Sparkles className="h-5 w-5" />
           다음: AI 캐릭터 매칭하기
@@ -300,7 +345,7 @@ function StepThreePublish({ onPrev }: { onPrev: () => void }) {
 
 export default function CreatePage() {
   const [step, setStep] = useState(1);
-  const [script, setScript] = useState(dummyScript);
+  const [script, setScript] = useState("");
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-10">
