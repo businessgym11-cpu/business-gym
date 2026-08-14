@@ -54,10 +54,11 @@ function LoginForm() {
             <Sparkles className="h-6 w-6" />
           </div>
           <h1 className="text-xl font-extrabold text-slate-900">
-            파트너 로그인
+            로그인 · 회원가입
           </h1>
           <p className="mt-2 text-sm text-slate-500">
-            이메일로 매직 링크를 보내드려요. 별도 비밀번호는 필요 없어요.
+            이메일로 매직 링크를 보내드려요. 처음이면 자동으로 가입되고,
+            비밀번호는 필요 없어요.
           </p>
         </div>
 

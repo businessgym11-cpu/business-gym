@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Plus, Sparkles } from "lucide-react";
+import type { User } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabase/server";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -14,7 +16,23 @@ const navItems = [
   { label: "AI 릴스 생성", href: "/create" },
 ];
 
-function Header() {
+async function getCurrentUser(): Promise<User | null> {
+  if (
+    !process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  ) {
+    return null;
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  return user;
+}
+
+function Header({ user }: { user: User | null }) {
   return (
     <header className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/80 shadow-sm backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
@@ -39,38 +57,60 @@ function Header() {
           ))}
         </nav>
 
-        {/* 우측: 액션 버튼 + 프로필 */}
+        {/* 우측: 로그인 여부에 따라 다르게 표시 */}
         <div className="flex items-center gap-3">
-          <Link
-            href="/create"
-            className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-purple-500/20 transition-transform duration-200 hover:scale-[1.03] hover:shadow-lg hover:shadow-purple-500/30 active:scale-[0.98]"
-          >
-            <Plus className="h-4 w-4" />
-            새 작업 만들기
-          </Link>
+          {user ? (
+            <>
+              <Link
+                href="/create"
+                className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-purple-500/20 transition-transform duration-200 hover:scale-[1.03] hover:shadow-lg hover:shadow-purple-500/30 active:scale-[0.98]"
+              >
+                <Plus className="h-4 w-4" />
+                새 작업 만들기
+              </Link>
 
-          <button
-            type="button"
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-purple-500 to-blue-500 text-sm font-semibold text-white shadow-sm ring-2 ring-white transition-transform duration-200 hover:scale-105"
-            aria-label="파트너 프로필"
-          >
-            PM
-          </button>
+              <button
+                type="button"
+                title={user.email ?? undefined}
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-purple-500 to-blue-500 text-sm font-semibold text-white shadow-sm ring-2 ring-white transition-transform duration-200 hover:scale-105"
+                aria-label="파트너 프로필"
+              >
+                {(user.email?.[0] ?? "P").toUpperCase()}
+              </button>
+            </>
+          ) : (
+            <>
+              <Link
+                href="/login"
+                className="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600 transition-colors duration-200 hover:bg-slate-100 hover:text-slate-900"
+              >
+                로그인
+              </Link>
+              <Link
+                href="/login"
+                className="rounded-xl bg-gradient-to-r from-purple-600 to-blue-500 px-5 py-2 text-sm font-bold text-white shadow-md shadow-purple-500/20 transition-transform duration-200 hover:scale-[1.03] hover:shadow-lg hover:shadow-purple-500/30 active:scale-[0.98]"
+              >
+                회원가입
+              </Link>
+            </>
+          )}
         </div>
       </div>
     </header>
   );
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const user = await getCurrentUser();
+
   return (
     <html lang="ko">
       <body className="min-h-screen bg-slate-50 text-slate-800 antialiased">
-        <Header />
+        <Header user={user} />
         <main>{children}</main>
       </body>
     </html>
