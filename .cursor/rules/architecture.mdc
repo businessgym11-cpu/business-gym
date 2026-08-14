@@ -1,0 +1,30 @@
+---
+description: Business Gym 4대 파트, 테크 스택, 생성 플로우. 모든 기획·코드는 이 아키텍처를 따른다.
+alwaysApply: true
+---
+
+# Business Gym Architecture
+
+플럭스 미디어 운영. 단순 SaaS가 아니라 [온라인 비즈니스 제작(사주 등) + 마케팅 자동화 + 교육] 올인원 인큐베이팅 플랫폼.
+
+## 4대 핵심 파트 (경계를 넘기지 말 것)
+
+1. **홍보 랜딩** `/` — 홍보, 결제 심사, 로그인, 진입 관문. 회원 앱 기능 넣지 말 것.
+2. **대시보드** `/dashboard` — 회원 비즈니스 데이터 관제탑. 콘텐츠 공장이 아님.
+3. **트렌드 분석** `/trending` — 유튜브/숏츠/릴스/틱톡 인기 콘텐츠 분석. 인사이트는 Step 1 대본 입력으로만 넘김.
+4. **AI 컨텐츠 생성** `/create` — 3스텝 마법사만 담당.
+
+## `/create` 3스텝 (순서·엔진 고정)
+
+- **Step 1 대본 기획**: 트렌드 키워드 → Gemini 1.5가 떡상 구조 대본 → 회원 수정
+- **Step 2 AI 모션 매칭**: AI 캐릭터/도사 선택, Hedra/D-ID/LivePortrait 립싱크, 이미지 교체·프롬프트 수정
+- **Step 3 최종 렌더링**: 자막 스타일·BGM → Creatomate 믹싱·자막 → 최종 MP4
+
+## 테크 스택 (임의 교체 금지)
+
+- Front: Next.js App Router + Tailwind, Vercel
+- DB/Auth: Supabase (유저, MP4 URL, 통계)
+- Automation: n8n (Pikapods)
+- AI: Gemini 1.5 (대본/분석), Hedra/D-ID (립싱크), Creatomate (렌더)
+
+프론트는 n8n 웹훅을 호출하고, 결과물 URL·통계는 Supabase에 저장한다. 생성 로직을 Next.js에 직접 넣지 말 것.
