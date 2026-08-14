@@ -87,7 +87,7 @@ function Header({ user }: { user: User | null }) {
                 로그인
               </Link>
               <Link
-                href="/login"
+                href="/signup"
                 className="rounded-xl bg-gradient-to-r from-purple-600 to-blue-500 px-5 py-2 text-sm font-bold text-white shadow-md shadow-purple-500/20 transition-transform duration-200 hover:scale-[1.03] hover:shadow-lg hover:shadow-purple-500/30 active:scale-[0.98]"
               >
                 회원가입

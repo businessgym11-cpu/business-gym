@@ -1,34 +1,61 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import { useSearchParams } from "next/navigation";
-import { Sparkles, Mail, Loader2, CheckCircle2 } from "lucide-react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Sparkles, Mail, Lock, Loader2, CheckCircle2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 function LoginForm() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const redirect = searchParams.get("redirect") ?? "/dashboard";
 
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [mode, setMode] = useState<"login" | "forgot">("login");
   const [status, setStatus] = useState<"idle" | "loading" | "sent" | "error">(
     "idle"
   );
   const [errorMessage, setErrorMessage] = useState("");
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setStatus("loading");
     setErrorMessage("");
 
     try {
       const supabase = createClient();
-      const { error } = await supabase.auth.signInWithOtp({
+      const { error } = await supabase.auth.signInWithPassword({
         email,
-        options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback?redirect=${encodeURIComponent(
-            redirect
-          )}`,
-        },
+        password,
+      });
+
+      if (error) {
+        setStatus("error");
+        setErrorMessage("이메일 또는 비밀번호가 올바르지 않아요.");
+        return;
+      }
+
+      router.push(redirect);
+      router.refresh();
+    } catch {
+      setStatus("error");
+      setErrorMessage(
+        "로그인 서비스가 아직 연결되지 않았어요. 잠시 후 다시 시도해주세요."
+      );
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStatus("loading");
+    setErrorMessage("");
+
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth/set-password`,
       });
 
       if (error) {
@@ -54,11 +81,12 @@ function LoginForm() {
             <Sparkles className="h-6 w-6" />
           </div>
           <h1 className="text-xl font-extrabold text-slate-900">
-            로그인 · 회원가입
+            {mode === "login" ? "파트너 로그인" : "비밀번호 재설정"}
           </h1>
           <p className="mt-2 text-sm text-slate-500">
-            이메일로 매직 링크를 보내드려요. 처음이면 자동으로 가입되고,
-            비밀번호는 필요 없어요.
+            {mode === "login"
+              ? "승인 메일로 받으신 이메일과 비밀번호로 로그인하세요."
+              : "가입하신 이메일로 비밀번호 재설정 링크를 보내드려요."}
           </p>
         </div>
 
@@ -66,14 +94,17 @@ function LoginForm() {
           <div className="mt-8 flex flex-col items-center gap-3 rounded-2xl bg-purple-50 px-6 py-8 text-center">
             <CheckCircle2 className="h-8 w-8 text-purple-600" />
             <p className="font-semibold text-slate-800">
-              {email}로 로그인 링크를 보냈어요.
+              {email}로 재설정 링크를 보냈어요.
             </p>
             <p className="text-sm text-slate-500">
-              메일함에서 링크를 클릭하면 자동으로 로그인됩니다.
+              메일함에서 링크를 클릭해 새 비밀번호를 설정해주세요.
             </p>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="mt-8 space-y-4">
+          <form
+            onSubmit={mode === "login" ? handleLogin : handleForgotPassword}
+            className="mt-8 space-y-4"
+          >
             <div className="flex items-center gap-3 rounded-xl border border-slate-200 px-4 py-3.5 transition-all duration-200 focus-within:border-purple-400 focus-within:ring-2 focus-within:ring-purple-500/30">
               <Mail className="h-5 w-5 flex-shrink-0 text-slate-400" />
               <input
@@ -85,6 +116,20 @@ function LoginForm() {
                 className="w-full border-none bg-transparent text-slate-800 placeholder:text-slate-400 focus:outline-none"
               />
             </div>
+
+            {mode === "login" && (
+              <div className="flex items-center gap-3 rounded-xl border border-slate-200 px-4 py-3.5 transition-all duration-200 focus-within:border-purple-400 focus-within:ring-2 focus-within:ring-purple-500/30">
+                <Lock className="h-5 w-5 flex-shrink-0 text-slate-400" />
+                <input
+                  type="password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="비밀번호"
+                  className="w-full border-none bg-transparent text-slate-800 placeholder:text-slate-400 focus:outline-none"
+                />
+              </div>
+            )}
 
             {status === "error" && (
               <p className="text-sm font-medium text-red-500">
@@ -102,8 +147,30 @@ function LoginForm() {
               ) : (
                 <Sparkles className="h-5 w-5" />
               )}
-              매직 링크로 로그인
+              {mode === "login" ? "로그인" : "재설정 링크 받기"}
             </button>
+
+            <div className="flex items-center justify-between text-sm">
+              <button
+                type="button"
+                onClick={() => {
+                  setMode(mode === "login" ? "forgot" : "login");
+                  setStatus("idle");
+                  setErrorMessage("");
+                }}
+                className="font-semibold text-purple-600 hover:underline"
+              >
+                {mode === "login" ? "비밀번호를 잊으셨나요?" : "로그인으로 돌아가기"}
+              </button>
+              {mode === "login" && (
+                <Link
+                  href="/signup"
+                  className="font-semibold text-slate-500 hover:text-slate-700"
+                >
+                  회원가입 신청
+                </Link>
+              )}
+            </div>
           </form>
         )}
       </div>
