@@ -452,12 +452,10 @@ function SceneVideoCard({
   scene,
   state,
   onChange,
-  disabledByOther,
 }: {
   scene: Scene;
   state: SceneState;
   onChange: (patch: Partial<SceneState>) => void;
-  disabledByOther: boolean;
 }) {
   const busy = state.videoStatus === "generating";
   const hasImage = Boolean(state.imageUrl);
@@ -532,12 +530,6 @@ function SceneVideoCard({
         </p>
       )}
 
-      {!busy && disabledByOther && (
-        <p className="mt-1.5 text-[11px] font-medium text-slate-400">
-          다른 씬이 변환 중이에요. 끝나면 시도해주세요.
-        </p>
-      )}
-
       {state.videoError && (
         <p className="mt-1.5 text-[11px] font-medium text-red-500">
           {state.videoError}
@@ -547,7 +539,7 @@ function SceneVideoCard({
       <button
         type="button"
         onClick={handleGenerate}
-        disabled={busy || !hasImage || disabledByOther}
+        disabled={busy || !hasImage}
         className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg border border-slate-200 px-2 py-1.5 text-[11px] font-medium text-slate-600 transition-colors duration-200 hover:border-purple-300 hover:bg-purple-50 hover:text-purple-700 disabled:cursor-not-allowed disabled:opacity-60"
       >
         {busy ? (
@@ -574,17 +566,12 @@ function StepTwoPointFiveVideo({
   onPrev: () => void;
   onNext: () => void;
 }) {
-  const generatingSceneId = scenes.find(
-    (scene) => sceneStates[scene.id]?.videoStatus === "generating"
-  )?.id;
-
   return (
     <div>
       <p className="text-sm text-slate-500">
         씬별 이미지를 짧은 동영상으로 변환해 보세요. 모션 프롬프트를 수정해서
         마음에 안 드는 씬만 다시 만들 수도 있어요. 비디오를 만들지 않은 씬은
-        정지 이미지로 그대로 렌더링돼요. AI 서버 부하를 줄이기 위해 한 번에
-        한 씬씩만 변환할 수 있어요.
+        정지 이미지로 그대로 렌더링돼요.
       </p>
 
       <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3">
@@ -600,9 +587,6 @@ function StepTwoPointFiveVideo({
               }
             }
             onChange={(patch) => updateScene(scene.id, patch)}
-            disabledByOther={
-              generatingSceneId !== undefined && generatingSceneId !== scene.id
-            }
           />
         ))}
       </div>
