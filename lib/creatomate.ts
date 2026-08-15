@@ -67,7 +67,7 @@ export function buildRenderScript(
               fill_color: preset.fill_color,
               font_family: preset.font_family,
               font_weight: "800",
-              font_size: "6.5%",
+              font_size: "6.5 vmin",
               background_color: preset.background_color,
               background_x_padding: "8%",
               background_y_padding: "4%",

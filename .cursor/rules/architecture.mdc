@@ -49,12 +49,14 @@ alwaysApply: true
 8. **씬 이미지 생성 시 대본 나레이션 텍스트를 그대로 이미지 프롬프트로 쓰면 안 된다.** 나레이션은 "말"이지 "그림 묘사"가 아니라서, 그대로 넣으면 AI가 추상적인 한국어 개념(이직, 대운 등)을 못 그리고 막연히 신비로운 동양풍 이미지로 얼버무린다. **해결**: fal.ai 노드 앞에 Gemini 노드를 하나 더 넣어서 나레이션을 "구체적 인물·행동·배경이 있는 영어 시각 프롬프트"로 먼저 변환한 뒤 fal.ai에 넘긴다. 사용자는 판타지/신비주의보다 **사실적인 사진 스타일**(예: 캐리어 끌고 걷는 직장인 뒷모습, 서류 쌓인 책상에서 머리 감싸쥔 사람)을 선호함 — 타로카드·연기 같은 초자연적 요소는 Gemini 프롬프트에서 명시적으로 금지시켜야 함.
 9. **관련 있어 보여도 워크플로우를 합치면 안 된다.** 대본 생성(1회, Step1)과 씬 이미지 생성(씬마다 독립적으로 여러 번, Step2)은 트리거 시점과 횟수가 다르다 — 합치면 "대본 수정 후 씬 분할" UX가 깨진다. 워크플로우는 파트별로 분리 유지.
 
-## Step 3 (Creatomate) 진행 상황 — 2026-08-15 세션 중단 시점
+## Step 3 (Creatomate) 진행 상황 — 2026-08-15 해결됨
 
-**Next.js 코드는 완성됨** (커밋 완료): `lib/creatomate.ts`(`buildRenderScript` — 씬 이미지+자막을 Creatomate RenderScript JSON으로 조립, 9:16, 씬당 4초, subtitle 스타일 3종 프리셋), `app/create/actions.ts`의 `renderFinalVideo()`(`N8N_RENDER_VIDEO_WEBHOOK_URL`로 전체 RenderScript를 그대로 POST), `app/create/page.tsx`의 `StepThreePublish`(렌더 버튼, 실제 비디오 플레이어, 다운로드 링크).
+**Next.js 코드 완성**: `lib/creatomate.ts`(`buildRenderScript` — 씬 이미지+자막을 Creatomate RenderScript JSON으로 조립, 9:16, 씬당 4초, subtitle 스타일 3종 프리셋), `app/create/actions.ts`의 `renderFinalVideo()`(`N8N_RENDER_VIDEO_WEBHOOK_URL`로 전체 RenderScript를 그대로 POST), `app/create/page.tsx`의 `StepThreePublish`(렌더 버튼, 실제 비디오 플레이어, 다운로드 링크).
 
-**n8n 워크플로우 "Business Gym - Final Video Render"**: `Webhook(render-video) → Submit Render(HTTP POST api.creatomate.com/v2/renders, body={{ $json.body }}) → Wait(5초) → Check Status(HTTP GET .../renders/{{ $('Submit Render').item.json.id }}) → If($json.status == "succeeded", false→Wait로 루프) → Respond to Webhook(true 경로, { videoUrl: JSON.stringify($json.url) })`. 구조는 다 만들었고 Publish도 함.
+**n8n 워크플로우 "Business Gym - Final Video Render"**: `Webhook(render-video) → Submit Render(HTTP POST api.creatomate.com/v2/renders, body={{ $json.body }}) → Wait(5초) → Check Status(HTTP GET .../renders/{{ $('Submit Render').item.json.id }}) → If($json.status == "succeeded", false→Wait로 루프) → Respond to Webhook(true 경로, { videoUrl: JSON.stringify($json.url) })`. Publish 완료, curl 테스트로 실제 MP4 렌더 성공 확인함.
 
-**막힌 지점**: curl로 실제 테스트 시 `POST /v2/renders`가 처음엔 "401 The provided API key is invalid"로 실패 → Authorization 헤더 값을 `Bearer <키>` 형식으로 재확인 후 다시 넣었는데도 **여전히 200 OK + 빈 응답**(Respond to Webhook까지 도달은 하는데 뭔가 값이 비어있거나, 루프 안에서 문제가 있을 가능성). **다음 세션에서 제일 먼저 할 일**: n8n Executions 탭에서 최신 실행 기록 열어서 Submit Render가 이번엔 성공했는지, If 노드가 몇 번 돌았는지, Respond to Webhook에 실제로 어떤 데이터가 들어왔는지 확인할 것. curl 테스트 커맨드는 이 세션 대화 기록에 있음(실제 fal.ai 이미지 URL 2개로 RenderScript 만들어서 `render-video` 웹훅에 POST).
+**당시 막혔던 두 가지 원인 (Executions 탭에서 확인 후 해결)**:
+1. **Check Status(`HTTP Request`) 노드의 Authorization 헤더에 `Bearer ` 접두사가 빠져 있었음.** Submit Render 노드는 `Bearer <키>`로 고쳤지만 같은 키를 쓰는 Check Status 노드는 안 고쳐서, Submit Render는 성공하고도 다음 단계인 상태 확인(Check Status)에서 "401 The provided API key is invalid"로 막혀 If/Respond to Webhook에 도달하지 못함(이게 "200 OK + 빈 응답"의 실제 원인). → n8n에서 Check Status 노드 Authorization 값에 `Bearer ` 접두사 추가하고 Publish로 해결.
+2. **`lib/creatomate.ts`의 자막 `font_size: "6.5%"`가 Creatomate에서 유효하지 않은 단위.** Creatomate의 `font_size`는 `px`/`vw`/`vh`/`vmin`/`vmax`만 허용(`%`는 안 됨, `background_x_padding`/`background_y_padding`은 `%` 허용). Submit Render 응답에 `Text.font_size: Expected a number ending with px or vw or vh or vmin or vmax` 에러가 찍혀 있었음. → `"6.5 vmin"`으로 수정.
 
-**Vercel Production에 아직 `N8N_RENDER_VIDEO_WEBHOOK_URL` 미반영** — n8n 쪽 디버깅 끝나면 이것도 추가+재배포 필요.
+**로컬 `.env.local`에 `N8N_RENDER_VIDEO_WEBHOOK_URL` 추가함.** Vercel Production에는 아직 미반영 — 배포 전에 Vercel 대시보드에 추가 + 재배포 필요.
