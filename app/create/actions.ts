@@ -1,11 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import {
-  buildRenderScript,
-  type RenderScene,
-  type SubtitleStyle,
-} from "@/lib/creatomate";
+import { buildRenderScript, type RenderScene } from "@/lib/creatomate";
 
 type GenerateScriptResult =
   | { success: true; script: string }
@@ -166,7 +162,6 @@ export async function uploadSceneImage(
 
 export async function renderFinalVideo(
   scenes: RenderScene[],
-  subtitleStyle: SubtitleStyle,
   totalDurationSeconds: number
 ): Promise<RenderVideoResult> {
   const webhookUrl = process.env.N8N_RENDER_VIDEO_WEBHOOK_URL;
@@ -187,11 +182,7 @@ export async function renderFinalVideo(
     };
   }
 
-  const renderScript = buildRenderScript(
-    scenes,
-    subtitleStyle,
-    totalDurationSeconds
-  );
+  const renderScript = buildRenderScript(scenes, totalDurationSeconds);
 
   try {
     const res = await fetch(webhookUrl, {

@@ -19,8 +19,10 @@ alwaysApply: true
 ## `/create` 3스텝 (순서·엔진 고정)
 
 - **Step 1 대본 기획**: 키워드 입력 → Gemini가 떡상 구조 대본 생성 → 회원 수정. **완성, 실서비스 작동 중.**
-- **Step 2 AI 모션 매칭**: 씬별 이미지 생성. **완성, 실서비스 작동 중.** `lib/scenes.ts`가 Step1 대본을 `**[3초 훅]**` 등 마커로 씬 분할. n8n `generate-scene-image` 웹훅: Webhook → Gemini(나레이션→영어 시각 프롬프트 변환, 아래 참고) → fal.ai(`flux/schnell`, `image_size: portrait_16_9`) → Respond. 사용자가 직접 이미지 업로드(Supabase Storage `scene-uploads` 버킷)하거나 프롬프트 직접 입력해서 재생성 가능. **1차는 Fal.ai만, 이후 Hedra/D-ID/Seedance 2.5로 확장 + 멤버십 등급별 선택권 차등 제공 예정(아직 미착수).**
-- **Step 3 최종 렌더링**: 자막 스타일 → Creatomate 믹싱·자막 → 최종 MP4. **완성, 실서비스 작동 중** (2026-08-15 해결, 아래 "작업 로그" 참고). BGM은 실제 음원 소스가 없어서 이번 라운드에서는 뺌(UI에 "준비 중"으로 비활성 표시만). 인스타그램 자동 발행 버튼도 UI만 있고 비활성화(Instagram Graph API 연동은 별도 작업).
+- **Step 2 AI 모션 매칭**: 씬별 이미지 생성. **완성, 실서비스 작동 중이지만 이미지 디테일 품질 개선 필요(아래 참고).** `lib/scenes.ts`가 Step1 대본을 `**[3초 훅]**` 등 마커로 씬 분할. n8n `generate-scene-image` 웹훅: Webhook → Gemini(나레이션→영어 시각 프롬프트 변환, 아래 참고) → fal.ai(`flux/schnell`, `image_size: portrait_16_9`) → Respond. 사용자가 직접 이미지 업로드(Supabase Storage `scene-uploads` 버킷)하거나 프롬프트 직접 입력해서 재생성 가능. **1차는 Fal.ai만, 이후 Hedra/D-ID/Seedance 2.5로 확장 + 멤버십 등급별 선택권 차등 제공 예정(아직 미착수).**
+  - **⚠️ 이미지 디테일 강화 필요(2026-08-15 발견)**: n8n의 나레이션→시각 프롬프트 변환 Gemini 노드는 지금 "무엇을 그릴지"(인물·행동·배경)만 지정하고 있어서, 내용은 맞지만 사진 디테일이 밋밋하다. **이 프롬프트에 "Photorealistic, 8K resolution, highly detailed, 시네마틱 조명" 같은 구체적 화질·연출 지시어를 반드시 포함하도록 수정할 것.** (함정 #8과 같은 노드, 같은 프롬프트를 손보면 됨 — 신비주의 금지 지시에 화질 지시어를 추가하는 식으로.)
+  - **📋 향후 계획: Image-to-Video 파이프라인 (아직 미착수)**: 정지 이미지 대신 움직이는 영상으로 결과물을 고도화할 예정. n8n `generate-scene-image` 워크플로우에 fal.ai(또는 별도 노드)의 Image-to-Video 모델 호출을 추가해서, fal.ai `flux/schnell`이 만든 정지 이미지를 짧은 동영상(MP4) 클립으로 한 번 더 변환한 뒤 프론트엔드로 전달하도록 확장한다. 이렇게 되면 `RenderScene`/`buildRenderScript`(Step3)도 `image` element 대신 `video` element를 쓰도록 같이 바뀌어야 함.
+- **Step 3 최종 렌더링**: Creatomate로 씬 이미지를 시퀀스 렌더링해 최종 MP4 생성. **완성, 실서비스 작동 중이지만 자막은 당분간 비활성(2026-08-15, 아래 "작업 로그" 참고).** TTS 음성이 없는 상태에서 대본 전체를 자막으로 얹으면 화면이 지저분해져서, `lib/creatomate.ts`의 Text 오버레이 로직을 완전히 제거하고 지금은 "생성된 씬 이미지의 연속"으로만 렌더링한다(UI의 "자막 스타일" 선택도 BGM처럼 "준비 중" 비활성 표시로 전환). 자막을 다시 붙이려면 TTS 음성 트랙과 함께 재설계해야 함. BGM도 실제 음원 소스가 없어서 이번 라운드에서는 뺌(UI에 "준비 중"으로 비활성 표시만). 인스타그램 자동 발행 버튼도 UI만 있고 비활성화(Instagram Graph API 연동은 별도 작업).
 
 ## 테크 스택 (임의 교체 금지)
 
@@ -85,4 +87,16 @@ curl로 `render-video` 웹훅에 직접 테스트해서 실제 MP4 렌더 성공
    - `lib/scenes.ts`의 마커 정규식이 n8n Step1 프롬프트가 어느 시점에 바뀐 새 포맷(`**[3초 훅] (0~3초)**` 처럼 마커 뒤에 부가 텍스트가 붙는 형태)을 매칭 못 해서 문단 단위 폴백으로 빠짐 → 위 함정 #11 참고. 마커 정규식을 `[^*]*` 허용하도록 완화하고, 나레이션을 큰따옴표째 추출하는 로직 추가.
 6. **관리자 페이지에서 승인(확인) 버튼 눌렀을 때 "Error in Server Components render" 크래시** → 이미 가입된 이메일(테스트용 홍길동/likesea85@gmail.com 신청 건, 관리자 본인 이메일과 중복)에 `inviteUserByEmail`이 에러를 던지는데 처리가 안 되어 있었음. `app/admin/actions.ts`를 throw 대신 `{ success: true } | { success: false; error }` 타입 반환으로 전면 재작성(중복 이메일이면 "이미 가입된 이메일이에요. 신청서를 거절 처리해주세요." 친절 메시지), `app/admin/AdminList.tsx`도 새 반환 타입에 맞게 수정.
 
-**다음에 이어서 할 일**: (a) n8n Script Generation 워크플로우 프롬프트에 duration 변수 연결(위 2번 참고) — 이거 안 하면 분량 선택 UI가 있어도 실제 대본 길이는 그대로임. (b) 실제 로그인해서 브라우저로 Step1→3 전체 재검증(특히 씬 시퀀싱·자막·라이트박스). (c) 테스트용 stale `signup_requests` 행(홍길동/likesea85@gmail.com)은 거절 처리할 것 — 승인 시도하면 항상 중복 이메일 에러남. (d) 커밋/푸시는 이 백업 시점 기준 아직 안 됨.
+**다음에 이어서 할 일**: (a) n8n Script Generation 워크플로우 프롬프트에 duration 변수 연결(위 2번 참고) — 이거 안 하면 분량 선택 UI가 있어도 실제 대본 길이는 그대로임. (b) 테스트용 stale `signup_requests` 행(홍길동/likesea85@gmail.com)은 거절 처리할 것 — 승인 시도하면 항상 중복 이메일 에러남. (c) 커밋만 하고 푸시는 안 함(사용자가 직접 브라우저 재검증 후 푸시 여부 확인하기로 함) → **아래 "밤 2" 항목 참고, 사용자가 직접 로그인해서 실제 E2E 완료함.**
+
+### 2026-08-15 (밤 2): 사용자 실제 E2E 결과 반영 — 자막 제거, 이미지 품질/향후 계획 기록
+
+사용자가 실제 로그인해서 Step1→3 전체를 브라우저로 끝까지 밟아봄. **대본 분량 선택(10/20/30초)과 씬 이미지 클릭 확대(라이트박스)는 정상 작동 확인.** 하지만 최종 렌더링 결과물 품질 문제 재확인: TTS 음성 없이 대본 전체가 자막으로 화면에 그대로 덮여서 지저분함. 사용자가 아래 조치를 요청함:
+
+1. **Creatomate 자막(Text) 오버레이 완전 제거** → `lib/creatomate.ts`에서 `SUBTITLE_PRESETS`와 Text element를 통째로 삭제, `buildRenderScript(scenes, totalDurationSeconds)`가 이미지 시퀀스만 조립하도록 단순화(`RenderScene`도 `{ imageUrl }`만 남기고 `caption` 필드 제거). `app/create/actions.ts`의 `renderFinalVideo()`도 `subtitleStyle` 파라미터 제거. `app/create/page.tsx`의 "자막 스타일" 셀렉트는 BGM 셀렉트와 동일한 패턴(`disabled` + "준비 중" 안내 문구)으로 전환 — 자막 관련 state(`subtitleStyle`)와 `SUBTITLE_OPTIONS`도 같이 제거. **당분간 최종 영상은 "생성된 씬 이미지의 연속"으로만 구성됨.** 자막을 다시 붙이려면 TTS 음성 트랙과 함께 재설계 필요(위 Step 3 섹션 참고).
+2. **이미지 디테일 강화 지시 문서화** → 위 "Step 2" 섹션에 n8n 프롬프트가 "Photorealistic, 8K resolution, highly detailed, 시네마틱 조명" 같은 구체적 화질 지시어를 포함해야 한다고 명시함(아직 n8n 워크플로우 자체는 수정 안 함 — 다음 세션에서 그 Gemini 노드 프롬프트에 반영할 것).
+3. **Image-to-Video 파이프라인 향후 계획 문서화** → 위 "Step 2" 섹션에 fal.ai Image-to-Video 모델을 추가 호출해서 정지 이미지를 짧은 MP4 클립으로 변환 후 프론트로 전달하는 고도화 계획을 명시함(설계만, 아직 미착수 — n8n 워크플로우 수정과 `RenderScene`/`buildRenderScript`의 `image`→`video` element 전환이 필요).
+
+`npm run build` 통과 확인함.
+
+**다음에 이어서 할 일**: (a) n8n Script Generation 프롬프트에 duration 변수 연결(아직 미완료, 위 "밤" 항목 2번 참고). (b) n8n `generate-scene-image` 워크플로우의 Gemini 프롬프트에 화질 지시어(Photorealistic/8K/시네마틱 조명 등) 추가. (c) fal.ai Image-to-Video 파이프라인 설계·구현 착수. (d) stale `signup_requests`(홍길동) 거절 처리. (e) 자막을 다시 붙이고 싶어지면 TTS 연동부터 먼저 붙여야 함 — 자막만 다시 얹으면 이번에 뺀 이유(지저분함)가 재발함.

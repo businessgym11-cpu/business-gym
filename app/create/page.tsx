@@ -23,7 +23,6 @@ import {
   renderFinalVideo,
 } from "./actions";
 import { parseScenes, type Scene } from "@/lib/scenes";
-import type { SubtitleStyle } from "@/lib/creatomate";
 
 const steps = [
   { id: 1, label: "대본 기획" },
@@ -427,12 +426,6 @@ function StepTwoMotion({
   );
 }
 
-const SUBTITLE_OPTIONS: { value: SubtitleStyle; label: string }[] = [
-  { value: "basic", label: "기본 (화이트 볼드)" },
-  { value: "neon", label: "네온 하이라이트" },
-  { value: "handwriting", label: "손글씨 감성체" },
-];
-
 function StepThreePublish({
   scenes,
   sceneStates,
@@ -444,7 +437,6 @@ function StepThreePublish({
   duration: number;
   onPrev: () => void;
 }) {
-  const [subtitleStyle, setSubtitleStyle] = useState<SubtitleStyle>("basic");
   const [status, setStatus] = useState<"idle" | "rendering" | "error">(
     "idle"
   );
@@ -461,10 +453,9 @@ function StepThreePublish({
 
     const renderScenes = scenes.map((scene) => ({
       imageUrl: sceneStates[scene.id]?.imageUrl ?? "",
-      caption: scene.text,
     }));
 
-    const result = await renderFinalVideo(renderScenes, subtitleStyle, duration);
+    const result = await renderFinalVideo(renderScenes, duration);
 
     if (!result.success) {
       setStatus("error");
@@ -532,18 +523,17 @@ function StepThreePublish({
               자막 스타일
             </label>
             <select
-              value={subtitleStyle}
-              onChange={(e) =>
-                setSubtitleStyle(e.target.value as SubtitleStyle)
-              }
-              className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-700 transition-colors duration-200 focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+              disabled
+              className="mt-2 w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-400"
             >
-              {SUBTITLE_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
+              <option>기본 (화이트 볼드) (준비 중)</option>
+              <option>네온 하이라이트 (준비 중)</option>
+              <option>손글씨 감성체 (준비 중)</option>
             </select>
+            <p className="mt-1 text-xs text-slate-400">
+              자막 오버레이는 준비 중이에요. 음성(TTS) 없이 대본 전체가 화면에
+              덮이면 지저분해서, 지금은 이미지 슬라이드만 렌더링돼요.
+            </p>
           </div>
 
           <div>
@@ -559,7 +549,8 @@ function StepThreePublish({
               <option>신비로운 동양풍 (준비 중)</option>
             </select>
             <p className="mt-1 text-xs text-slate-400">
-              배경음악 연동은 준비 중이에요. 지금은 자막만 적용됩니다.
+              배경음악 연동은 준비 중이에요. 지금은 이미지 슬라이드만
+              적용됩니다.
             </p>
           </div>
 
