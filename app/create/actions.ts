@@ -15,6 +15,10 @@ type UploadImageResult =
   | { success: true; imageUrl: string }
   | { success: false; error: string };
 
+type GenerateVideoResult =
+  | { success: true; videoUrl: string }
+  | { success: false; error: string };
+
 type RenderVideoResult =
   | { success: true; videoUrl: string }
   | { success: false; error: string };
@@ -120,6 +124,59 @@ export async function generateSceneImage(
       success: false,
       error:
         "AI 이미지 생성 서비스에 연결할 수 없어요. n8n 워크플로우가 켜져 있는지 확인해주세요.",
+    };
+  }
+}
+
+export async function generateSceneVideo(
+  imageUrl: string,
+  motionPrompt: string
+): Promise<GenerateVideoResult> {
+  const webhookUrl = process.env.N8N_GENERATE_VIDEO_WEBHOOK_URL;
+  const secret = process.env.N8N_WEBHOOK_SECRET;
+
+  if (!webhookUrl || !secret) {
+    return {
+      success: false,
+      error:
+        "AI 비디오 변환 서비스가 아직 연결되지 않았어요. n8n 웹훅 설정을 확인해주세요.",
+    };
+  }
+
+  try {
+    const res = await fetch(webhookUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-webhook-secret": secret,
+      },
+      body: JSON.stringify({ imageUrl, motionPrompt }),
+      signal: AbortSignal.timeout(120000),
+    });
+
+    if (!res.ok) {
+      return {
+        success: false,
+        error: `비디오 변환에 실패했어요. (status ${res.status})`,
+      };
+    }
+
+    const data = await res.json();
+    const videoUrl = typeof data.videoUrl === "string" ? data.videoUrl : "";
+
+    if (!videoUrl) {
+      return {
+        success: false,
+        error: "AI가 빈 응답을 반환했어요. 다시 시도해주세요.",
+      };
+    }
+
+    return { success: true, videoUrl };
+  } catch {
+    return {
+      success: false,
+      error:
+        "AI 비디오 변환 서비스에 연결할 수 없어요. n8n 워크플로우가 켜져 있는지 확인해주세요.",
     };
   }
 }

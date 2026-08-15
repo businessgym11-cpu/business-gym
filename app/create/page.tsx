@@ -7,6 +7,7 @@ import {
   Upload,
   Image as ImageIcon,
   Film,
+  Clapperboard,
   ArrowLeft,
   Play,
   Download,
@@ -19,6 +20,7 @@ import {
 import {
   generateScript,
   generateSceneImage,
+  generateSceneVideo,
   uploadSceneImage,
   renderFinalVideo,
 } from "./actions";
@@ -26,15 +28,22 @@ import { parseScenes, type Scene } from "@/lib/scenes";
 
 const steps = [
   { id: 1, label: "대본 기획" },
-  { id: 2, label: "AI 모션 매칭" },
-  { id: 3, label: "최종 렌더링" },
+  { id: 2, label: "AI 이미지 매칭" },
+  { id: 3, label: "AI 비디오 변환" },
+  { id: 4, label: "최종 렌더링" },
 ];
+
+const DEFAULT_MOTION_PROMPT = "Natural and subtle motion, cinematic, high quality";
 
 type SceneState = {
   prompt: string;
   imageUrl?: string;
   status: "idle" | "generating" | "uploading" | "error";
   error?: string;
+  motionPrompt: string;
+  videoUrl?: string;
+  videoStatus: "idle" | "generating" | "error";
+  videoError?: string;
 };
 
 function StepProgress({ step }: { step: number }) {
@@ -198,7 +207,7 @@ function StepOneScript({
           className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-blue-500 px-6 py-3.5 font-bold text-white shadow-lg shadow-purple-500/30 transition-all duration-200 hover:scale-105 hover:shadow-xl active:scale-100 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Sparkles className="h-5 w-5" />
-          다음: AI 캐릭터 매칭하기
+          다음: AI 이미지 매칭하기
         </button>
       </div>
     </div>
@@ -395,12 +404,187 @@ function StepTwoMotion({
               key={scene.id}
               scene={scene}
               state={
-                sceneStates[scene.id] ?? { prompt: scene.text, status: "idle" }
+                sceneStates[scene.id] ?? {
+                  prompt: scene.text,
+                  status: "idle",
+                  motionPrompt: DEFAULT_MOTION_PROMPT,
+                  videoStatus: "idle",
+                }
               }
               onChange={(patch) => updateScene(scene.id, patch)}
             />
           ))}
         </div>
+      </div>
+
+      <div className="mt-8 flex items-center justify-between">
+        <button
+          type="button"
+          onClick={onPrev}
+          className="flex items-center gap-2 rounded-xl bg-slate-100 px-5 py-3 text-sm font-semibold text-slate-600 transition-colors duration-200 hover:bg-slate-200"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          이전 단계로
+        </button>
+
+        <button
+          type="button"
+          onClick={onNext}
+          className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-blue-500 px-6 py-3.5 font-bold text-white shadow-lg shadow-purple-500/30 transition-all duration-200 hover:scale-105 hover:shadow-xl active:scale-100"
+        >
+          <Clapperboard className="h-5 w-5" />
+          다음: AI 비디오 변환하기
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const MOTION_STATUS_DEFAULT: Pick<
+  SceneState,
+  "motionPrompt" | "videoStatus"
+> = {
+  motionPrompt: DEFAULT_MOTION_PROMPT,
+  videoStatus: "idle",
+};
+
+function SceneVideoCard({
+  scene,
+  state,
+  onChange,
+}: {
+  scene: Scene;
+  state: SceneState;
+  onChange: (patch: Partial<SceneState>) => void;
+}) {
+  const busy = state.videoStatus === "generating";
+  const hasImage = Boolean(state.imageUrl);
+
+  const handleGenerate = async () => {
+    if (!state.imageUrl) return;
+    onChange({ videoStatus: "generating", videoError: undefined });
+    const result = await generateSceneVideo(
+      state.imageUrl,
+      state.motionPrompt || DEFAULT_MOTION_PROMPT
+    );
+
+    if (!result.success) {
+      onChange({ videoStatus: "error", videoError: result.error });
+      return;
+    }
+
+    onChange({
+      videoStatus: "idle",
+      videoUrl: result.videoUrl,
+      videoError: undefined,
+    });
+  };
+
+  return (
+    <div className="flex flex-col rounded-xl border border-slate-200 p-3">
+      <div className="relative aspect-[9/16] overflow-hidden rounded-lg bg-gradient-to-br from-purple-100 via-rose-50 to-blue-50">
+        <span className="absolute left-2 top-2 z-10 rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-bold text-purple-700">
+          씬 {scene.id}
+        </span>
+
+        {state.videoUrl ? (
+          <video
+            src={state.videoUrl}
+            controls
+            loop
+            muted
+            playsInline
+            className="h-full w-full object-cover"
+          />
+        ) : hasImage ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={state.imageUrl}
+            alt={`씬 ${scene.id} 이미지`}
+            className="h-full w-full object-cover opacity-60"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center">
+            <Clapperboard className="h-8 w-8 text-purple-300" />
+          </div>
+        )}
+
+        {busy && (
+          <div className="absolute inset-0 flex items-center justify-center bg-white/70">
+            <Loader2 className="h-6 w-6 animate-spin text-purple-600" />
+          </div>
+        )}
+      </div>
+
+      <textarea
+        value={state.motionPrompt}
+        onChange={(e) => onChange({ motionPrompt: e.target.value })}
+        rows={2}
+        placeholder="모션 프롬프트 (예: 천천히 카메라 줌인, 자연스러운 손동작)"
+        className="mt-2 w-full resize-none rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:border-purple-400 focus:outline-none focus:ring-1 focus:ring-purple-500/30"
+      />
+
+      {!hasImage && (
+        <p className="mt-1.5 text-[11px] font-medium text-amber-600">
+          이전 단계에서 이미지를 먼저 생성해주세요.
+        </p>
+      )}
+
+      {state.videoError && (
+        <p className="mt-1.5 text-[11px] font-medium text-red-500">
+          {state.videoError}
+        </p>
+      )}
+
+      <button
+        type="button"
+        onClick={handleGenerate}
+        disabled={busy || !hasImage}
+        className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg border border-slate-200 px-2 py-1.5 text-[11px] font-medium text-slate-600 transition-colors duration-200 hover:border-purple-300 hover:bg-purple-50 hover:text-purple-700 disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        <RefreshCw className="h-3 w-3" />
+        {state.videoUrl ? "해당 씬 재생성" : "비디오로 변환"}
+      </button>
+    </div>
+  );
+}
+
+function StepTwoPointFiveVideo({
+  scenes,
+  sceneStates,
+  updateScene,
+  onPrev,
+  onNext,
+}: {
+  scenes: Scene[];
+  sceneStates: Record<number, SceneState>;
+  updateScene: (id: number, patch: Partial<SceneState>) => void;
+  onPrev: () => void;
+  onNext: () => void;
+}) {
+  return (
+    <div>
+      <p className="text-sm text-slate-500">
+        씬별 이미지를 짧은 동영상으로 변환해 보세요. 모션 프롬프트를 수정해서
+        마음에 안 드는 씬만 다시 만들 수도 있어요. 비디오를 만들지 않은 씬은
+        정지 이미지로 그대로 렌더링돼요.
+      </p>
+
+      <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3">
+        {scenes.map((scene) => (
+          <SceneVideoCard
+            key={scene.id}
+            scene={scene}
+            state={
+              sceneStates[scene.id] ?? {
+                prompt: scene.text,
+                status: "idle",
+                ...MOTION_STATUS_DEFAULT,
+              }
+            }
+            onChange={(patch) => updateScene(scene.id, patch)}
+          />
+        ))}
       </div>
 
       <div className="mt-8 flex items-center justify-between">
@@ -444,7 +628,8 @@ function StepThreePublish({
   const [videoUrl, setVideoUrl] = useState("");
 
   const missingImages = scenes.some(
-    (scene) => !sceneStates[scene.id]?.imageUrl
+    (scene) =>
+      !sceneStates[scene.id]?.videoUrl && !sceneStates[scene.id]?.imageUrl
   );
 
   const handleRender = async () => {
@@ -452,7 +637,10 @@ function StepThreePublish({
     setError("");
 
     const renderScenes = scenes.map((scene) => ({
-      imageUrl: sceneStates[scene.id]?.imageUrl ?? "",
+      imageUrl:
+        sceneStates[scene.id]?.videoUrl ||
+        sceneStates[scene.id]?.imageUrl ||
+        "",
     }));
 
     const result = await renderFinalVideo(renderScenes, duration);
@@ -615,7 +803,15 @@ export default function CreatePage() {
   const updateScene = (id: number, patch: Partial<SceneState>) => {
     setSceneStates((prev) => ({
       ...prev,
-      [id]: { ...(prev[id] ?? { prompt: "", status: "idle" }), ...patch },
+      [id]: {
+        ...(prev[id] ?? {
+          prompt: "",
+          status: "idle",
+          motionPrompt: DEFAULT_MOTION_PROMPT,
+          videoStatus: "idle",
+        }),
+        ...patch,
+      },
     }));
   };
 
@@ -626,7 +822,7 @@ export default function CreatePage() {
           AI 콘텐츠 생성 마법사
         </h1>
         <p className="mt-2 text-slate-500">
-          3단계면 당신만의 숏폼이 완성됩니다.
+          4단계면 당신만의 숏폼이 완성됩니다.
         </p>
       </div>
 
@@ -654,11 +850,20 @@ export default function CreatePage() {
           />
         )}
         {step === 3 && (
+          <StepTwoPointFiveVideo
+            scenes={scenes}
+            sceneStates={sceneStates}
+            updateScene={updateScene}
+            onPrev={() => setStep(2)}
+            onNext={() => setStep(4)}
+          />
+        )}
+        {step === 4 && (
           <StepThreePublish
             scenes={scenes}
             sceneStates={sceneStates}
             duration={duration}
-            onPrev={() => setStep(2)}
+            onPrev={() => setStep(3)}
           />
         )}
       </div>
