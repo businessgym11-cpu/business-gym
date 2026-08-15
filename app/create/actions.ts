@@ -1,6 +1,11 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import {
+  buildRenderScript,
+  type RenderScene,
+  type SubtitleStyle,
+} from "@/lib/creatomate";
 
 type GenerateScriptResult =
   | { success: true; script: string }
@@ -12,6 +17,10 @@ type GenerateImageResult =
 
 type UploadImageResult =
   | { success: true; imageUrl: string }
+  | { success: false; error: string };
+
+type RenderVideoResult =
+  | { success: true; videoUrl: string }
   | { success: false; error: string };
 
 export async function generateScript(
@@ -152,4 +161,66 @@ export async function uploadSceneImage(
   } = supabase.storage.from("scene-uploads").getPublicUrl(path);
 
   return { success: true, imageUrl: publicUrl };
+}
+
+export async function renderFinalVideo(
+  scenes: RenderScene[],
+  subtitleStyle: SubtitleStyle
+): Promise<RenderVideoResult> {
+  const webhookUrl = process.env.N8N_RENDER_VIDEO_WEBHOOK_URL;
+  const secret = process.env.N8N_WEBHOOK_SECRET;
+
+  if (!webhookUrl || !secret) {
+    return {
+      success: false,
+      error:
+        "최종 렌더링 서비스가 아직 연결되지 않았어요. n8n 웹훅 설정을 확인해주세요.",
+    };
+  }
+
+  if (scenes.some((s) => !s.imageUrl)) {
+    return {
+      success: false,
+      error: "모든 씬에 이미지가 있어야 렌더링할 수 있어요.",
+    };
+  }
+
+  const renderScript = buildRenderScript(scenes, subtitleStyle);
+
+  try {
+    const res = await fetch(webhookUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-webhook-secret": secret,
+      },
+      body: JSON.stringify(renderScript),
+      signal: AbortSignal.timeout(180000),
+    });
+
+    if (!res.ok) {
+      return {
+        success: false,
+        error: `최종 렌더링에 실패했어요. (status ${res.status})`,
+      };
+    }
+
+    const data = await res.json();
+    const videoUrl = typeof data.videoUrl === "string" ? data.videoUrl : "";
+
+    if (!videoUrl) {
+      return {
+        success: false,
+        error: "AI가 빈 응답을 반환했어요. 다시 시도해주세요.",
+      };
+    }
+
+    return { success: true, videoUrl };
+  } catch {
+    return {
+      success: false,
+      error:
+        "최종 렌더링 서비스에 연결할 수 없어요. n8n 워크플로우가 켜져 있는지 확인해주세요.",
+    };
+  }
 }

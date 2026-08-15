@@ -17,8 +17,8 @@ alwaysApply: true
 ## `/create` 3스텝 (순서·엔진 고정)
 
 - **Step 1 대본 기획**: 키워드 입력 → Gemini가 떡상 구조 대본 생성 → 회원 수정. **완성, 실서비스 작동 중.**
-- **Step 2 AI 모션 매칭**: 씬별 이미지/모션 생성. **1차는 Fal.ai만 연동, 이후 Hedra/D-ID/Seedance 2.5로 확장 예정 — 확장분은 멤버십 등급별 선택권 차등 제공(비쌀수록 더 많은 AI 선택 가능)으로 설계할 것.** 사용자가 직접 이미지 업로드하거나 프롬프트로 재생성하는 경로도 필요.
-- **Step 3 최종 렌더링**: 자막 스타일·BGM → Creatomate 믹싱·자막 → 최종 MP4. **아직 미착수.**
+- **Step 2 AI 모션 매칭**: 씬별 이미지 생성. **완성, 실서비스 작동 중.** `lib/scenes.ts`가 Step1 대본을 `**[3초 훅]**` 등 마커로 씬 분할. n8n `generate-scene-image` 웹훅: Webhook → Gemini(나레이션→영어 시각 프롬프트 변환, 아래 참고) → fal.ai(`flux/schnell`, `image_size: portrait_16_9`) → Respond. 사용자가 직접 이미지 업로드(Supabase Storage `scene-uploads` 버킷)하거나 프롬프트 직접 입력해서 재생성 가능. **1차는 Fal.ai만, 이후 Hedra/D-ID/Seedance 2.5로 확장 + 멤버십 등급별 선택권 차등 제공 예정(아직 미착수).**
+- **Step 3 최종 렌더링**: 자막 스타일 → Creatomate 믹싱·자막 → 최종 MP4. **진행 중, 아직 미완성 — 아래 "진행 상황" 참고.** BGM은 실제 음원 소스가 없어서 이번 라운드에서는 뺌(UI에 "준비 중"으로 비활성 표시만). 인스타그램 자동 발행 버튼도 UI만 있고 비활성화(Instagram Graph API 연동은 별도 작업).
 
 ## 테크 스택 (임의 교체 금지)
 
@@ -45,3 +45,16 @@ alwaysApply: true
 4. **Resend는 도메인 미인증 상태(`onboarding@resend.dev` 발신)일 땐 Resend 가입 계정 소유 이메일로만 발송 가능하다.** 다른 수신자에게 보내면 403 "Testing domain restriction" 에러. 지금은 `businessgym.co.kr` 도메인 인증 완료해서 해제됨.
 5. Vercel은 **Production 환경변수를 대시보드에 추가해도 기존 배포엔 소급 적용 안 됨** — 재배포(Redeploy) 필수.
 6. n8n Gemini 노드에서 특정 모델(예: `models/gemini-2.5-flash`)이 "no longer available" 에러가 날 수 있다 — Model 드롭다운에서 `models/gemini-flash-latest` 같은 최신 별칭으로 바꾸면 해결.
+7. **Fal.ai 계정에 크레딧이 없으면 "403 Exhausted balance"로 명확히 에러 남** (fal.ai/dashboard/billing 충전).
+8. **씬 이미지 생성 시 대본 나레이션 텍스트를 그대로 이미지 프롬프트로 쓰면 안 된다.** 나레이션은 "말"이지 "그림 묘사"가 아니라서, 그대로 넣으면 AI가 추상적인 한국어 개념(이직, 대운 등)을 못 그리고 막연히 신비로운 동양풍 이미지로 얼버무린다. **해결**: fal.ai 노드 앞에 Gemini 노드를 하나 더 넣어서 나레이션을 "구체적 인물·행동·배경이 있는 영어 시각 프롬프트"로 먼저 변환한 뒤 fal.ai에 넘긴다. 사용자는 판타지/신비주의보다 **사실적인 사진 스타일**(예: 캐리어 끌고 걷는 직장인 뒷모습, 서류 쌓인 책상에서 머리 감싸쥔 사람)을 선호함 — 타로카드·연기 같은 초자연적 요소는 Gemini 프롬프트에서 명시적으로 금지시켜야 함.
+9. **관련 있어 보여도 워크플로우를 합치면 안 된다.** 대본 생성(1회, Step1)과 씬 이미지 생성(씬마다 독립적으로 여러 번, Step2)은 트리거 시점과 횟수가 다르다 — 합치면 "대본 수정 후 씬 분할" UX가 깨진다. 워크플로우는 파트별로 분리 유지.
+
+## Step 3 (Creatomate) 진행 상황 — 2026-08-15 세션 중단 시점
+
+**Next.js 코드는 완성됨** (커밋 완료): `lib/creatomate.ts`(`buildRenderScript` — 씬 이미지+자막을 Creatomate RenderScript JSON으로 조립, 9:16, 씬당 4초, subtitle 스타일 3종 프리셋), `app/create/actions.ts`의 `renderFinalVideo()`(`N8N_RENDER_VIDEO_WEBHOOK_URL`로 전체 RenderScript를 그대로 POST), `app/create/page.tsx`의 `StepThreePublish`(렌더 버튼, 실제 비디오 플레이어, 다운로드 링크).
+
+**n8n 워크플로우 "Business Gym - Final Video Render"**: `Webhook(render-video) → Submit Render(HTTP POST api.creatomate.com/v2/renders, body={{ $json.body }}) → Wait(5초) → Check Status(HTTP GET .../renders/{{ $('Submit Render').item.json.id }}) → If($json.status == "succeeded", false→Wait로 루프) → Respond to Webhook(true 경로, { videoUrl: JSON.stringify($json.url) })`. 구조는 다 만들었고 Publish도 함.
+
+**막힌 지점**: curl로 실제 테스트 시 `POST /v2/renders`가 처음엔 "401 The provided API key is invalid"로 실패 → Authorization 헤더 값을 `Bearer <키>` 형식으로 재확인 후 다시 넣었는데도 **여전히 200 OK + 빈 응답**(Respond to Webhook까지 도달은 하는데 뭔가 값이 비어있거나, 루프 안에서 문제가 있을 가능성). **다음 세션에서 제일 먼저 할 일**: n8n Executions 탭에서 최신 실행 기록 열어서 Submit Render가 이번엔 성공했는지, If 노드가 몇 번 돌았는지, Respond to Webhook에 실제로 어떤 데이터가 들어왔는지 확인할 것. curl 테스트 커맨드는 이 세션 대화 기록에 있음(실제 fal.ai 이미지 URL 2개로 RenderScript 만들어서 `render-video` 웹훅에 POST).
+
+**Vercel Production에 아직 `N8N_RENDER_VIDEO_WEBHOOK_URL` 미반영** — n8n 쪽 디버깅 끝나면 이것도 추가+재배포 필요.

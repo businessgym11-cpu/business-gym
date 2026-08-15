@@ -15,8 +15,14 @@ import {
   Wand2,
   Loader2,
 } from "lucide-react";
-import { generateScript, generateSceneImage, uploadSceneImage } from "./actions";
+import {
+  generateScript,
+  generateSceneImage,
+  uploadSceneImage,
+  renderFinalVideo,
+} from "./actions";
 import { parseScenes, type Scene } from "@/lib/scenes";
+import type { SubtitleStyle } from "@/lib/creatomate";
 
 const steps = [
   { id: 1, label: "대본 기획" },
@@ -361,7 +367,53 @@ function StepTwoMotion({
   );
 }
 
-function StepThreePublish({ onPrev }: { onPrev: () => void }) {
+const SUBTITLE_OPTIONS: { value: SubtitleStyle; label: string }[] = [
+  { value: "basic", label: "기본 (화이트 볼드)" },
+  { value: "neon", label: "네온 하이라이트" },
+  { value: "handwriting", label: "손글씨 감성체" },
+];
+
+function StepThreePublish({
+  scenes,
+  sceneStates,
+  onPrev,
+}: {
+  scenes: Scene[];
+  sceneStates: Record<number, SceneState>;
+  onPrev: () => void;
+}) {
+  const [subtitleStyle, setSubtitleStyle] = useState<SubtitleStyle>("basic");
+  const [status, setStatus] = useState<"idle" | "rendering" | "error">(
+    "idle"
+  );
+  const [error, setError] = useState("");
+  const [videoUrl, setVideoUrl] = useState("");
+
+  const missingImages = scenes.some(
+    (scene) => !sceneStates[scene.id]?.imageUrl
+  );
+
+  const handleRender = async () => {
+    setStatus("rendering");
+    setError("");
+
+    const renderScenes = scenes.map((scene) => ({
+      imageUrl: sceneStates[scene.id]?.imageUrl ?? "",
+      caption: scene.text,
+    }));
+
+    const result = await renderFinalVideo(renderScenes, subtitleStyle);
+
+    if (!result.success) {
+      setStatus("error");
+      setError(result.error);
+      return;
+    }
+
+    setVideoUrl(result.videoUrl);
+    setStatus("idle");
+  };
+
   return (
     <div>
       <button
@@ -373,22 +425,41 @@ function StepThreePublish({ onPrev }: { onPrev: () => void }) {
         이전 단계로
       </button>
 
+      {missingImages && (
+        <p className="mt-4 rounded-xl bg-amber-50 px-4 py-3 text-sm font-medium text-amber-700">
+          아직 이미지가 없는 씬이 있어요. 이전 단계에서 모든 씬에 이미지를
+          채워주세요.
+        </p>
+      )}
+
       <div className="mt-6 grid grid-cols-1 gap-10 lg:grid-cols-[auto_1fr] lg:items-center">
         {/* 비디오 프리뷰 */}
         <div className="mx-auto w-full max-w-[240px]">
           <div className="relative aspect-[9/16] overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800 to-slate-900 shadow-lg">
-            <div className="absolute inset-0 flex items-center justify-center">
-              <button
-                type="button"
-                aria-label="영상 재생"
-                className="flex h-16 w-16 items-center justify-center rounded-full bg-white/90 shadow-lg transition-transform duration-200 hover:scale-105"
-              >
-                <Play className="h-6 w-6 fill-purple-600 text-purple-600" />
-              </button>
-            </div>
-            <span className="absolute bottom-3 left-3 rounded-full bg-black/50 px-2 py-1 text-xs text-white">
-              00:32
-            </span>
+            {videoUrl ? (
+              <video
+                src={videoUrl}
+                controls
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  {status === "rendering" ? (
+                    <Loader2 className="h-10 w-10 animate-spin text-white/80" />
+                  ) : (
+                    <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white/20">
+                      <Play className="h-6 w-6 fill-white/60 text-white/60" />
+                    </div>
+                  )}
+                </div>
+                {status === "rendering" && (
+                  <span className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/50 px-3 py-1 text-xs text-white">
+                    렌더링 중... (최대 몇 분 소요)
+                  </span>
+                )}
+              </>
+            )}
           </div>
         </div>
 
@@ -398,10 +469,18 @@ function StepThreePublish({ onPrev }: { onPrev: () => void }) {
             <label className="text-sm font-semibold text-slate-700">
               자막 스타일
             </label>
-            <select className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-700 transition-colors duration-200 focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-500/30">
-              <option>기본 (화이트 볼드)</option>
-              <option>네온 하이라이트</option>
-              <option>손글씨 감성체</option>
+            <select
+              value={subtitleStyle}
+              onChange={(e) =>
+                setSubtitleStyle(e.target.value as SubtitleStyle)
+              }
+              className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-700 transition-colors duration-200 focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+            >
+              {SUBTITLE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -409,29 +488,61 @@ function StepThreePublish({ onPrev }: { onPrev: () => void }) {
             <label className="text-sm font-semibold text-slate-700">
               배경음악 선택
             </label>
-            <select className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-700 transition-colors duration-200 focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-500/30">
-              <option>잔잔한 감성 피아노</option>
-              <option>트렌디 업비트</option>
-              <option>신비로운 동양풍</option>
+            <select
+              disabled
+              className="mt-2 w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-400"
+            >
+              <option>잔잔한 감성 피아노 (준비 중)</option>
+              <option>트렌디 업비트 (준비 중)</option>
+              <option>신비로운 동양풍 (준비 중)</option>
             </select>
+            <p className="mt-1 text-xs text-slate-400">
+              배경음악 연동은 준비 중이에요. 지금은 자막만 적용됩니다.
+            </p>
           </div>
+
+          <button
+            type="button"
+            onClick={handleRender}
+            disabled={status === "rendering" || missingImages}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-blue-500 px-6 py-3.5 font-bold text-white shadow-lg shadow-purple-500/30 transition-all duration-200 hover:scale-[1.02] hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {status === "rendering" ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <Film className="h-5 w-5" />
+            )}
+            {videoUrl ? "다시 렌더링" : "최종 영상 만들기"}
+          </button>
+
+          {status === "error" && (
+            <p className="text-sm font-medium text-red-500">{error}</p>
+          )}
         </div>
       </div>
 
       <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
-        <button
-          type="button"
-          className="flex items-center justify-center gap-2 rounded-xl border-2 border-slate-200 px-6 py-3.5 font-semibold text-slate-700 transition-all duration-200 hover:border-purple-300 hover:bg-purple-50 hover:text-purple-700"
+        <a
+          href={videoUrl || undefined}
+          download
+          aria-disabled={!videoUrl}
+          className={`flex items-center justify-center gap-2 rounded-xl border-2 px-6 py-3.5 font-semibold transition-all duration-200 ${
+            videoUrl
+              ? "border-slate-200 text-slate-700 hover:border-purple-300 hover:bg-purple-50 hover:text-purple-700"
+              : "pointer-events-none border-slate-100 text-slate-300"
+          }`}
         >
           <Download className="h-5 w-5" />
           완성본 MP4 다운로드
-        </button>
+        </a>
         <button
           type="button"
-          className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-yellow-400 via-pink-500 to-purple-600 px-8 py-3.5 font-bold text-white shadow-lg shadow-pink-500/30 transition-all duration-200 hover:scale-105 hover:shadow-xl active:scale-100"
+          disabled
+          title="인스타그램 연동은 준비 중이에요"
+          className="flex cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-yellow-400 via-pink-500 to-purple-600 px-8 py-3.5 font-bold text-white opacity-50 shadow-lg shadow-pink-500/30"
         >
           <Rocket className="h-5 w-5" />
-          인스타그램 릴스로 즉시 발행
+          인스타그램 릴스로 즉시 발행 (준비 중)
         </button>
       </div>
     </div>
@@ -486,7 +597,13 @@ export default function CreatePage() {
             onNext={() => setStep(3)}
           />
         )}
-        {step === 3 && <StepThreePublish onPrev={() => setStep(2)} />}
+        {step === 3 && (
+          <StepThreePublish
+            scenes={scenes}
+            sceneStates={sceneStates}
+            onPrev={() => setStep(2)}
+          />
+        )}
       </div>
     </div>
   );
