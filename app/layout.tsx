@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Plus, Sparkles } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
+import ProfileMenu from "./ProfileMenu";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -69,14 +70,7 @@ function Header({ user }: { user: User | null }) {
                 새 작업 만들기
               </Link>
 
-              <button
-                type="button"
-                title={user.email ?? undefined}
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-purple-500 to-blue-500 text-sm font-semibold text-white shadow-sm ring-2 ring-white transition-transform duration-200 hover:scale-105"
-                aria-label="파트너 프로필"
-              >
-                {(user.email?.[0] ?? "P").toUpperCase()}
-              </button>
+              <ProfileMenu email={user.email ?? ""} />
             </>
           ) : (
             <>

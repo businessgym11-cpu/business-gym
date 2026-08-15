@@ -14,6 +14,7 @@ import {
   Check,
   Wand2,
   Loader2,
+  X,
 } from "lucide-react";
 import {
   generateScript,
@@ -84,13 +85,19 @@ function StepProgress({ step }: { step: number }) {
   );
 }
 
+const DURATION_OPTIONS = [10, 20, 30];
+
 function StepOneScript({
   script,
   setScript,
+  duration,
+  setDuration,
   onNext,
 }: {
   script: string;
   setScript: (v: string) => void;
+  duration: number;
+  setDuration: (v: number) => void;
   onNext: () => void;
 }) {
   const [keyword, setKeyword] = useState("");
@@ -106,7 +113,7 @@ function StepOneScript({
     setGenerating(true);
     setError("");
 
-    const result = await generateScript(keyword.trim());
+    const result = await generateScript(keyword.trim(), duration);
 
     if (!result.success) {
       setError(result.error);
@@ -125,7 +132,29 @@ function StepOneScript({
         자유롭게 수정하세요.
       </p>
 
-      <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+      <div className="mt-4 flex items-center gap-2">
+        <span className="text-sm font-semibold text-slate-700">
+          영상 분량
+        </span>
+        <div className="flex rounded-lg border border-slate-200 p-1">
+          {DURATION_OPTIONS.map((d) => (
+            <button
+              key={d}
+              type="button"
+              onClick={() => setDuration(d)}
+              className={`rounded-md px-3 py-1.5 text-sm font-semibold transition-colors duration-200 ${
+                duration === d
+                  ? "bg-gradient-to-r from-purple-600 to-blue-500 text-white"
+                  : "text-slate-500 hover:bg-slate-100"
+              }`}
+            >
+              {d}초
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-col gap-3 sm:flex-row">
         <input
           type="text"
           value={keyword}
@@ -187,6 +216,7 @@ function SceneCard({
   onChange: (patch: Partial<SceneState>) => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [expanded, setExpanded] = useState(false);
   const busy = state.status === "generating" || state.status === "uploading";
 
   const handleGenerate = async () => {
@@ -227,12 +257,19 @@ function SceneCard({
         </span>
 
         {state.imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={state.imageUrl}
-            alt={`씬 ${scene.id} 이미지`}
-            className="h-full w-full object-cover"
-          />
+          <button
+            type="button"
+            onClick={() => setExpanded(true)}
+            className="block h-full w-full cursor-zoom-in"
+            aria-label="이미지 크게 보기"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={state.imageUrl}
+              alt={`씬 ${scene.id} 이미지`}
+              className="h-full w-full object-cover"
+            />
+          </button>
         ) : (
           <div className="flex h-full w-full items-center justify-center">
             <ImageIcon className="h-8 w-8 text-purple-300" />
@@ -287,6 +324,29 @@ function SceneCard({
           className="hidden"
         />
       </div>
+
+      {expanded && state.imageUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-6"
+          onClick={() => setExpanded(false)}
+        >
+          <button
+            type="button"
+            onClick={() => setExpanded(false)}
+            aria-label="닫기"
+            className="absolute right-6 top-6 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition-colors duration-200 hover:bg-white/20"
+          >
+            <X className="h-5 w-5" />
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={state.imageUrl}
+            alt={`씬 ${scene.id} 이미지 크게 보기`}
+            className="max-h-full max-w-full rounded-xl object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -376,10 +436,12 @@ const SUBTITLE_OPTIONS: { value: SubtitleStyle; label: string }[] = [
 function StepThreePublish({
   scenes,
   sceneStates,
+  duration,
   onPrev,
 }: {
   scenes: Scene[];
   sceneStates: Record<number, SceneState>;
+  duration: number;
   onPrev: () => void;
 }) {
   const [subtitleStyle, setSubtitleStyle] = useState<SubtitleStyle>("basic");
@@ -402,7 +464,7 @@ function StepThreePublish({
       caption: scene.text,
     }));
 
-    const result = await renderFinalVideo(renderScenes, subtitleStyle);
+    const result = await renderFinalVideo(renderScenes, subtitleStyle, duration);
 
     if (!result.success) {
       setStatus("error");
@@ -552,6 +614,7 @@ function StepThreePublish({
 export default function CreatePage() {
   const [step, setStep] = useState(1);
   const [script, setScript] = useState("");
+  const [duration, setDuration] = useState(30);
   const [sceneStates, setSceneStates] = useState<Record<number, SceneState>>(
     {}
   );
@@ -585,6 +648,8 @@ export default function CreatePage() {
           <StepOneScript
             script={script}
             setScript={setScript}
+            duration={duration}
+            setDuration={setDuration}
             onNext={() => setStep(2)}
           />
         )}
@@ -601,6 +666,7 @@ export default function CreatePage() {
           <StepThreePublish
             scenes={scenes}
             sceneStates={sceneStates}
+            duration={duration}
             onPrev={() => setStep(2)}
           />
         )}

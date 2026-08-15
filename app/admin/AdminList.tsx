@@ -26,11 +26,8 @@ export default function AdminList({
     setActiveId(id);
     setErrorMessage("");
     startTransition(async () => {
-      try {
-        await approveSignupRequest(id);
-      } catch (err) {
-        setErrorMessage(err instanceof Error ? err.message : "승인에 실패했습니다.");
-      }
+      const result = await approveSignupRequest(id);
+      if (!result.success) setErrorMessage(result.error);
     });
   };
 
@@ -38,11 +35,8 @@ export default function AdminList({
     setActiveId(id);
     setErrorMessage("");
     startTransition(async () => {
-      try {
-        await rejectSignupRequest(id);
-      } catch (err) {
-        setErrorMessage(err instanceof Error ? err.message : "거절에 실패했습니다.");
-      }
+      const result = await rejectSignupRequest(id);
+      if (!result.success) setErrorMessage(result.error);
     });
   };
 

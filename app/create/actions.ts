@@ -24,7 +24,8 @@ type RenderVideoResult =
   | { success: false; error: string };
 
 export async function generateScript(
-  keyword: string
+  keyword: string,
+  durationSeconds: number
 ): Promise<GenerateScriptResult> {
   const webhookUrl = process.env.N8N_GENERATE_SCRIPT_WEBHOOK_URL;
   const secret = process.env.N8N_WEBHOOK_SECRET;
@@ -44,7 +45,7 @@ export async function generateScript(
         "Content-Type": "application/json",
         "x-webhook-secret": secret,
       },
-      body: JSON.stringify({ keyword }),
+      body: JSON.stringify({ keyword, duration: durationSeconds }),
       signal: AbortSignal.timeout(30000),
     });
 
@@ -165,7 +166,8 @@ export async function uploadSceneImage(
 
 export async function renderFinalVideo(
   scenes: RenderScene[],
-  subtitleStyle: SubtitleStyle
+  subtitleStyle: SubtitleStyle,
+  totalDurationSeconds: number
 ): Promise<RenderVideoResult> {
   const webhookUrl = process.env.N8N_RENDER_VIDEO_WEBHOOK_URL;
   const secret = process.env.N8N_WEBHOOK_SECRET;
@@ -185,7 +187,11 @@ export async function renderFinalVideo(
     };
   }
 
-  const renderScript = buildRenderScript(scenes, subtitleStyle);
+  const renderScript = buildRenderScript(
+    scenes,
+    subtitleStyle,
+    totalDurationSeconds
+  );
 
   try {
     const res = await fetch(webhookUrl, {
