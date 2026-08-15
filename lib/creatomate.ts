@@ -26,10 +26,15 @@ function resolveElementType(url: string): "video" | "image" {
  * fit: "cover"가 실제로 프레임을 꽉 채운다 — 크기를 안 주면 엘리먼트가
  * 원본 비율대로 작게 배치되어 검은 레터박스가 생기는 문제가 있었다.
  *
- * video 엘리먼트에는 duration을 슬롯 길이(perSceneDuration)로 명시하고
- * loop를 켠다 — 안 그러면 원본 클립이 슬롯보다 짧을 때(Step2.5 영상은
- * 몇 초짜리 짧은 클립) 클립이 먼저 끝나고 다음 씬 시작 전까지 남는
- * 시간이 검은 화면으로 남는 문제가 있었다.
+ * video 엘리먼트에는 duration을 슬롯 길이(perSceneDuration)로 명시한다 —
+ * 안 그러면 원본 클립 길이만큼만 재생하고 슬롯이 남으면 검은 화면이
+ * 남는다. loop 대신 트림(자르기) 방식을 쓴다: Step 2.5에서 슬롯보다
+ * 넉넉하게 긴 클립을 만들어오면, 여기서 duration만큼만 재생하고 뒷부분은
+ * 잘려나간다(반복 재생은 씬이 어색하게 끊겨 보인다는 피드백으로 폐기,
+ * 2026-08-16). 원본 클립이 duration보다 짧으면 다시 검은 화면 문제가
+ * 재발하니, Step 2.5 쪽 영상 생성 길이가 항상 perSceneDuration보다
+ * 길어야 한다 — n8n LTX-Video 노드의 생성 길이 설정을 충분히 길게
+ * (예: 최소 10초 이상) 잡을 것.
  */
 export function buildRenderScript(
   scenes: RenderScene[],
@@ -64,7 +69,7 @@ export function buildRenderScript(
                 height: "100%",
                 fit: "cover",
                 ...(elementType === "video"
-                  ? { duration: perSceneDuration, loop: true }
+                  ? { duration: perSceneDuration }
                   : {}),
               },
             ],
