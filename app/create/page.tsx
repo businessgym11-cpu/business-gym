@@ -452,10 +452,12 @@ function SceneVideoCard({
   scene,
   state,
   onChange,
+  targetDurationSeconds,
 }: {
   scene: Scene;
   state: SceneState;
   onChange: (patch: Partial<SceneState>) => void;
+  targetDurationSeconds: number;
 }) {
   const busy = state.videoStatus === "generating";
   const hasImage = Boolean(state.imageUrl);
@@ -465,7 +467,8 @@ function SceneVideoCard({
     onChange({ videoStatus: "generating", videoError: undefined });
     const result = await generateSceneVideo(
       state.imageUrl,
-      state.motionPrompt || DEFAULT_MOTION_PROMPT
+      state.motionPrompt || DEFAULT_MOTION_PROMPT,
+      targetDurationSeconds
     );
 
     if (!result.success) {
@@ -556,16 +559,20 @@ function SceneVideoCard({
 function StepTwoPointFiveVideo({
   scenes,
   sceneStates,
+  duration,
   updateScene,
   onPrev,
   onNext,
 }: {
   scenes: Scene[];
   sceneStates: Record<number, SceneState>;
+  duration: number;
   updateScene: (id: number, patch: Partial<SceneState>) => void;
   onPrev: () => void;
   onNext: () => void;
 }) {
+  const perSceneDuration = duration / scenes.length;
+
   return (
     <div>
       <p className="text-sm text-slate-500">
@@ -587,6 +594,7 @@ function StepTwoPointFiveVideo({
               }
             }
             onChange={(patch) => updateScene(scene.id, patch)}
+            targetDurationSeconds={perSceneDuration}
           />
         ))}
       </div>
@@ -857,6 +865,7 @@ export default function CreatePage() {
           <StepTwoPointFiveVideo
             scenes={scenes}
             sceneStates={sceneStates}
+            duration={duration}
             updateScene={updateScene}
             onPrev={() => setStep(2)}
             onNext={() => setStep(4)}

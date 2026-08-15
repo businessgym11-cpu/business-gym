@@ -130,7 +130,8 @@ export async function generateSceneImage(
 
 export async function generateSceneVideo(
   imageUrl: string,
-  motionPrompt: string
+  motionPrompt: string,
+  targetDurationSeconds: number
 ): Promise<GenerateVideoResult> {
   const webhookUrl = process.env.N8N_GENERATE_VIDEO_WEBHOOK_URL;
   const secret = process.env.N8N_WEBHOOK_SECRET;
@@ -150,7 +151,7 @@ export async function generateSceneVideo(
         "Content-Type": "application/json",
         "x-webhook-secret": secret,
       },
-      body: JSON.stringify({ imageUrl, motionPrompt }),
+      body: JSON.stringify({ imageUrl, motionPrompt, targetDurationSeconds }),
       signal: AbortSignal.timeout(280000),
     });
 
