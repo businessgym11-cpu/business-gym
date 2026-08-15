@@ -25,6 +25,11 @@ function resolveElementType(url: string): "video" | "image" {
  * 루트/컴포지션/엘리먼트 전 구간에 width/height: "100%"를 명시해야
  * fit: "cover"가 실제로 프레임을 꽉 채운다 — 크기를 안 주면 엘리먼트가
  * 원본 비율대로 작게 배치되어 검은 레터박스가 생기는 문제가 있었다.
+ *
+ * video 엘리먼트에는 duration을 슬롯 길이(perSceneDuration)로 명시하고
+ * loop를 켠다 — 안 그러면 원본 클립이 슬롯보다 짧을 때(Step2.5 영상은
+ * 몇 초짜리 짧은 클립) 클립이 먼저 끝나고 다음 씬 시작 전까지 남는
+ * 시간이 검은 화면으로 남는 문제가 있었다.
  */
 export function buildRenderScript(
   scenes: RenderScene[],
@@ -42,23 +47,29 @@ export function buildRenderScript(
         track: 1,
         width: "100%",
         height: "100%",
-        elements: scenes.map((scene, i) => ({
-          type: "composition",
-          time: i * perSceneDuration,
-          duration: perSceneDuration,
-          width: "100%",
-          height: "100%",
-          elements: [
-            {
-              type: resolveElementType(scene.imageUrl),
-              track: 1,
-              source: scene.imageUrl,
-              width: "100%",
-              height: "100%",
-              fit: "cover",
-            },
-          ],
-        })),
+        elements: scenes.map((scene, i) => {
+          const elementType = resolveElementType(scene.imageUrl);
+          return {
+            type: "composition",
+            time: i * perSceneDuration,
+            duration: perSceneDuration,
+            width: "100%",
+            height: "100%",
+            elements: [
+              {
+                type: elementType,
+                track: 1,
+                source: scene.imageUrl,
+                width: "100%",
+                height: "100%",
+                fit: "cover",
+                ...(elementType === "video"
+                  ? { duration: perSceneDuration, loop: true }
+                  : {}),
+              },
+            ],
+          };
+        }),
       },
     ],
   };
