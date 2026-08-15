@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   Sparkles,
   RefreshCw,
@@ -15,7 +15,8 @@ import {
   Wand2,
   Loader2,
 } from "lucide-react";
-import { generateScript } from "./actions";
+import { generateScript, generateSceneImage, uploadSceneImage } from "./actions";
+import { parseScenes, type Scene } from "@/lib/scenes";
 
 const steps = [
   { id: 1, label: "대본 기획" },
@@ -23,20 +24,12 @@ const steps = [
   { id: 3, label: "최종 렌더링" },
 ];
 
-const scenes = [
-  {
-    id: 1,
-    text: '"혹시 요즘 뭘 해도 잘 안 풀리시나요? 사실 이유가 있습니다."',
-  },
-  {
-    id: 2,
-    text: "올해 당신의 사주에는 '역마살'이 강하게 들어와 있어요. 그래서 한 곳에 정착하지 못하고 계속 흔들리는 느낌을 받으셨을 거예요.",
-  },
-  {
-    id: 3,
-    text: "하지만 역마살은 나쁜 것이 아니에요. 지금이 새로운 기회를 잡을 최적의 타이밍이라는 신호랍니다.",
-  },
-];
+type SceneState = {
+  prompt: string;
+  imageUrl?: string;
+  status: "idle" | "generating" | "uploading" | "error";
+  error?: string;
+};
 
 function StepProgress({ step }: { step: number }) {
   return (
@@ -178,18 +171,138 @@ function StepOneScript({
   );
 }
 
+function SceneCard({
+  scene,
+  state,
+  onChange,
+}: {
+  scene: Scene;
+  state: SceneState;
+  onChange: (patch: Partial<SceneState>) => void;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const busy = state.status === "generating" || state.status === "uploading";
+
+  const handleGenerate = async () => {
+    onChange({ status: "generating", error: undefined });
+    const result = await generateSceneImage(state.prompt || scene.text);
+
+    if (!result.success) {
+      onChange({ status: "error", error: result.error });
+      return;
+    }
+
+    onChange({ status: "idle", imageUrl: result.imageUrl, error: undefined });
+  };
+
+  const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    onChange({ status: "uploading", error: undefined });
+    const formData = new FormData();
+    formData.append("file", file);
+    const result = await uploadSceneImage(formData);
+
+    if (!result.success) {
+      onChange({ status: "error", error: result.error });
+      return;
+    }
+
+    onChange({ status: "idle", imageUrl: result.imageUrl, error: undefined });
+  };
+
+  return (
+    <div className="flex flex-col rounded-xl border border-slate-200 p-3">
+      <div className="relative aspect-[9/16] overflow-hidden rounded-lg bg-gradient-to-br from-purple-100 via-rose-50 to-blue-50">
+        <span className="absolute left-2 top-2 z-10 rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-bold text-purple-700">
+          씬 {scene.id}
+        </span>
+
+        {state.imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={state.imageUrl}
+            alt={`씬 ${scene.id} 이미지`}
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center">
+            <ImageIcon className="h-8 w-8 text-purple-300" />
+          </div>
+        )}
+
+        {busy && (
+          <div className="absolute inset-0 flex items-center justify-center bg-white/70">
+            <Loader2 className="h-6 w-6 animate-spin text-purple-600" />
+          </div>
+        )}
+      </div>
+
+      <input
+        type="text"
+        value={state.prompt}
+        onChange={(e) => onChange({ prompt: e.target.value })}
+        placeholder="이미지 스타일 프롬프트 (선택)"
+        className="mt-2 w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:border-purple-400 focus:outline-none focus:ring-1 focus:ring-purple-500/30"
+      />
+
+      {state.error && (
+        <p className="mt-1.5 text-[11px] font-medium text-red-500">
+          {state.error}
+        </p>
+      )}
+
+      <div className="mt-2 flex items-center justify-between gap-1.5">
+        <button
+          type="button"
+          onClick={handleGenerate}
+          disabled={busy}
+          className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-slate-200 px-2 py-1.5 text-[11px] font-medium text-slate-600 transition-colors duration-200 hover:border-purple-300 hover:bg-purple-50 hover:text-purple-700 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <RefreshCw className="h-3 w-3" />
+          {state.imageUrl ? "컷 교체" : "AI 생성"}
+        </button>
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={busy}
+          aria-label="내 PC 업로드"
+          className="flex items-center justify-center rounded-lg border border-slate-200 p-1.5 text-slate-500 transition-colors duration-200 hover:border-purple-300 hover:bg-purple-50 hover:text-purple-700 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <Upload className="h-3.5 w-3.5" />
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleFileSelected}
+          className="hidden"
+        />
+      </div>
+    </div>
+  );
+}
+
 function StepTwoMotion({
+  scenes,
+  sceneStates,
+  updateScene,
   onPrev,
   onNext,
 }: {
+  scenes: Scene[];
+  sceneStates: Record<number, SceneState>;
+  updateScene: (id: number, patch: Partial<SceneState>) => void;
   onPrev: () => void;
   onNext: () => void;
 }) {
   return (
     <div>
       <p className="text-sm text-slate-500">
-        씬(Scene)별로 어울리는 동양풍 캐릭터와 모션을 자동으로 매칭했어요.
-        마음에 들지 않으면 컷을 교체하거나 직접 업로드해 보세요.
+        씬(Scene)별로 AI 이미지를 생성해 보세요. 프롬프트를 수정해 다시
+        생성하거나, 마음에 드는 이미지를 직접 업로드할 수도 있어요.
       </p>
 
       <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-[1fr_1.4fr]">
@@ -201,7 +314,7 @@ function StepTwoMotion({
               className="rounded-xl border border-slate-200 p-4"
             >
               <p className="text-xs font-bold text-purple-600">
-                씬 {scene.id}
+                씬 {scene.id} · {scene.label}
               </p>
               <p className="mt-1 text-sm leading-relaxed text-slate-600">
                 {scene.text}
@@ -210,35 +323,17 @@ function StepTwoMotion({
           ))}
         </div>
 
-        {/* 우측: 매칭된 썸네일 그리드 */}
-        <div className="grid grid-cols-3 gap-4">
+        {/* 우측: 씬별 이미지 카드 */}
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
           {scenes.map((scene) => (
-            <div key={scene.id} className="flex flex-col">
-              <div className="relative aspect-[9/16] overflow-hidden rounded-xl bg-gradient-to-br from-purple-100 via-rose-50 to-blue-50">
-                <span className="absolute left-2 top-2 rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-bold text-purple-700">
-                  씬 {scene.id}
-                </span>
-                <div className="flex h-full w-full items-center justify-center">
-                  <ImageIcon className="h-8 w-8 text-purple-300" />
-                </div>
-              </div>
-              <div className="mt-2 flex items-center justify-between gap-1.5">
-                <button
-                  type="button"
-                  className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-slate-200 px-2 py-1.5 text-[11px] font-medium text-slate-600 transition-colors duration-200 hover:border-purple-300 hover:bg-purple-50 hover:text-purple-700"
-                >
-                  <RefreshCw className="h-3 w-3" />
-                  컷 교체
-                </button>
-                <button
-                  type="button"
-                  aria-label="내 PC 업로드"
-                  className="flex items-center justify-center rounded-lg border border-slate-200 p-1.5 text-slate-500 transition-colors duration-200 hover:border-purple-300 hover:bg-purple-50 hover:text-purple-700"
-                >
-                  <Upload className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </div>
+            <SceneCard
+              key={scene.id}
+              scene={scene}
+              state={
+                sceneStates[scene.id] ?? { prompt: scene.text, status: "idle" }
+              }
+              onChange={(patch) => updateScene(scene.id, patch)}
+            />
           ))}
         </div>
       </div>
@@ -346,6 +441,18 @@ function StepThreePublish({ onPrev }: { onPrev: () => void }) {
 export default function CreatePage() {
   const [step, setStep] = useState(1);
   const [script, setScript] = useState("");
+  const [sceneStates, setSceneStates] = useState<Record<number, SceneState>>(
+    {}
+  );
+
+  const scenes = useMemo(() => parseScenes(script), [script]);
+
+  const updateScene = (id: number, patch: Partial<SceneState>) => {
+    setSceneStates((prev) => ({
+      ...prev,
+      [id]: { ...(prev[id] ?? { prompt: "", status: "idle" }), ...patch },
+    }));
+  };
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-10">
@@ -371,7 +478,13 @@ export default function CreatePage() {
           />
         )}
         {step === 2 && (
-          <StepTwoMotion onPrev={() => setStep(1)} onNext={() => setStep(3)} />
+          <StepTwoMotion
+            scenes={scenes}
+            sceneStates={sceneStates}
+            updateScene={updateScene}
+            onPrev={() => setStep(1)}
+            onNext={() => setStep(3)}
+          />
         )}
         {step === 3 && <StepThreePublish onPrev={() => setStep(2)} />}
       </div>
