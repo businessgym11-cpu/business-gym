@@ -57,6 +57,7 @@ alwaysApply: true
 10. **Creatomate의 composition 자식 element는 `time`을 명시하지 않으면 전부 0초에서 동시에 렌더링된다.** 씬별 composition 배열을 만들 때 `time: i * perSceneDuration`을 빼먹으면, 겹쳐진 것들 중 맨 위(배열 마지막) 것만 화면에 보이고 나머지는 그 뒤에 가려진 채로 존재한다 — 에러 없이 조용히 "마지막 씬만 전체 길이만큼 나오는" 결과가 나와서 원인 파악이 까다롭다. `lib/creatomate.ts`의 `buildRenderScript()`에서 항상 `time`을 명시적으로 계산해서 넣을 것.
 11. **`lib/scenes.ts`의 씬 분할 정규식은 n8n Step1 프롬프트가 만드는 마커 포맷과 강하게 결합되어 있다.** n8n에서 Gemini 프롬프트 포맷을 바꾸면(예: `**[3초 훅]**` → `**[3초 훅] (0~3초)**`처럼 마커 뒤에 부가 텍스트 추가) 파서가 매칭 실패하고 조용히 문단 단위 폴백으로 빠져서 자막에 마크다운(`#`, `**`, 괄호 설명 등)이 그대로 섞여 나온다. **n8n 프롬프트 포맷을 바꿀 때마다 `lib/scenes.ts`의 `markerRegex`/`narrationMatch`도 같이 확인·수정할 것.** 지금은 `내레이션[:：]?\s*\*{0,2}\s*"([^"]+)"` 패턴으로 나레이션을 따옴표째 뽑아내는 방식이라, 프롬프트가 나레이션을 큰따옴표로 감싸서 출력하는 한 안전하다.
 12. **Creatomate에서 루트 `width`/`height`만 지정하고 그 안의 composition·엘리먼트에 크기를 안 주면 `fit: "cover"`를 줘도 소용없다.** 루트가 9:16(1080x1920)이어도, 자식 composition과 image/video 엘리먼트가 각자 원본 비율대로 작게 배치되면서 검은 레터박스가 생긴다. **씬을 감싸는 모든 composition과 그 안의 image/video 엘리먼트에 `width: "100%", height: "100%"`를 명시적으로 넣어야** `fit: "cover"`가 실제로 프레임을 꽉 채운다.
+13. **fal.ai 같은 AI 렌더링 웹훅은 몇 분씩 걸리므로, `app/create/actions.ts`의 `fetch` `AbortSignal.timeout()` 값을 실제 n8n 실행 시간보다 넉넉하게 잡아야 한다.** `generateSceneVideo()`가 처음엔 120초(2분)로 잡혀 있었는데, n8n Executions 로그를 보면 fal.ai Kling image-to-video 노드가 1분54초~2분21초 걸렸다 — 특히 **씬 여러 개를 동시에 변환 요청하면 n8n/fal.ai 쪽에 부하가 겹쳐서 개별 실행 시간이 더 늘어나** 타임아웃을 넘기기 쉽다(2026-08-16 실사용 중 발견, 프론트는 "연결할 수 없어요" 에러를 냈지만 n8n은 뒤늦게 성공함 — 즉 실패가 아니라 순수 타임아웃). `generateSceneVideo()`는 280초로 늘림. **Next.js Server Action 자체의 Vercel 함수 제한 시간도 별도로 늘려야 한다** — `"use server"` 파일(`actions.ts`)에는 `maxDuration`을 export할 수 없고("Only async functions are allowed to be exported in a use server file" 에러), 그 액션이 호출되는 라우트의 **Server Component** 파일(`app/create/layout.tsx`)에 `export const maxDuration = 300;`을 넣어야 한다 — `app/create/page.tsx`는 `"use client"`라 여기엔 못 넣는다.
 
 ## 작업 로그 (백업)
 
@@ -140,3 +141,12 @@ curl로 `render-video` 웹훅에 직접 테스트해서 실제 MP4 렌더 성공
 n8n 쪽 Step 2.5 연동 작업은 이제 전부 완료됨.
 
 **다음에 이어서 할 일**: (a) 사용자가 직접 로그인해서 Step1→2→2.5→3 전체 브라우저 E2E 재검증 — 아직 한 번도 실제로 안 밟아봄(지금까지는 n8n 개별 노드 테스트와 `npm run build`만 확인함). 특히 Step 2.5의 "비디오로 변환"/"해당 씬 재생성" 버튼 동작, Step 3에서 videoUrl 있는 씬은 영상으로 없는 씬은 정지 이미지로 잘 섞여 렌더링되는지 확인 필요. (b) stale `signup_requests`(홍길동) 거절 처리 — 아직 안 함. (c) 자막 재도입은 TTS 연동 이후로.
+
+### 2026-08-16 (4): 사용자 실제 E2E 결과 — Step 2.5 비디오 변환 타임아웃 버그 발견/수정
+
+사용자가 위 "다음에 이어서 할 일" (a)를 실제로 밟아봄. Step 1(대본, 30초 분량)과 Step 2(이미지 4개 생성)는 정상 작동 확인. Step 2.5에서 씬 4개를 거의 동시에 "비디오로 변환" 눌렀더니 일부만 성공하고 나머지는 "AI 비디오 변환 서비스에 연결할 수 없어요" 에러가 남. 사용자가 "한 번에 여러 개를 만들어서 그런 거냐"고 질문 → 맞음, n8n Executions 로그로 확인함:
+
+- 원인: `generateSceneVideo()`의 `AbortSignal.timeout()`이 120초(2분)로 잡혀 있었는데, n8n Executions 로그를 보니 fal.ai Kling image-to-video 노드 실행이 실제로는 1분54초~2분21초 걸림. 씬 여러 개를 동시에 요청하면 n8n/fal.ai 쪽 부하가 겹쳐서 개별 실행 시간이 더 늘어나 타임아웃을 넘기기 쉬워짐 — n8n은 결국 성공했지만 프론트는 이미 120초 만에 포기하고 에러를 띄운 뒤라 그 결과를 못 받은 것(진짜 실패가 아니라 순수 클라이언트 타임아웃).
+- 수정: `app/create/actions.ts`의 `generateSceneVideo()` 타임아웃을 120초 → 280초로 늘림. 그리고 이 Server Action이 몇 분씩 걸릴 수 있는 걸 Vercel 함수 자체도 알아야 해서 `maxDuration`을 늘리려 했는데, `"use server"` 파일에는 `maxDuration`을 export할 수 없다는 빌드 에러가 남(async 함수만 export 가능) → `app/create/page.tsx`는 클라이언트 컴포넌트라 거기도 안 됨 → 새로 만든 서버 컴포넌트 `app/create/layout.tsx`에 `export const maxDuration = 300;`을 넣어서 해결(위 함정 #13 참고). `npm run build` 통과 확인함.
+
+**다음에 이어서 할 일**: (a) 배포 후 사용자가 다시 Step 2.5에서 여러 씬 동시 변환을 재시도해서 타임아웃이 실제로 해결됐는지 확인. (b) 여전히 자주 타임아웃 나면, 프론트에서 "한 번에 한 씬씩 순차적으로만 생성" 하도록 버튼을 비활성화하는 것도 고려(현재는 각 카드가 독립적이라 사용자가 여러 개를 빠르게 연속 클릭하면 동시 요청이 됨). (c) Step 3까지 이어서 videoUrl/imageUrl 혼합 렌더링 확인. (d) stale `signup_requests`(홍길동) 거절 처리 — 아직 안 함.

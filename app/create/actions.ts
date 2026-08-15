@@ -151,7 +151,7 @@ export async function generateSceneVideo(
         "x-webhook-secret": secret,
       },
       body: JSON.stringify({ imageUrl, motionPrompt }),
-      signal: AbortSignal.timeout(120000),
+      signal: AbortSignal.timeout(280000),
     });
 
     if (!res.ok) {
