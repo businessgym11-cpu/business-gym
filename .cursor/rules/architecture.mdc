@@ -7,6 +7,8 @@ alwaysApply: true
 
 플럭스 미디어 운영. 단순 SaaS가 아니라 [온라인 비즈니스 제작(사주 등) + 마케팅 자동화 + 교육] 올인원 인큐베이팅 플랫폼.
 
+> **"백업해줘" 컨벤션**: 사용자가 "백업해줘"라고 말하면, 그 세션에서 진행한 작업 내용(뭘 했는지, 뭘 고쳤는지, 지금 상태, 다음에 할 일)을 이 파일 맨 아래 "작업 로그" 섹션에 날짜와 함께 새 항목으로 추가할 것. Claude든 Cursor든 다음에 이어받는 쪽이 헷갈리지 않도록 하는 목적. 기존 섹션(4대 파트, 스텝별 상태, 함정 목록)에 구조적으로 들어갈 내용이면 해당 섹션도 같이 갱신.
+
 ## 4대 핵심 파트 (경계를 넘기지 말 것)
 
 1. **홍보 랜딩** `/` — 홍보, 결제 심사, 로그인, 진입 관문. 회원 앱 기능 넣지 말 것.
@@ -18,11 +20,12 @@ alwaysApply: true
 
 - **Step 1 대본 기획**: 키워드 입력 → Gemini가 떡상 구조 대본 생성 → 회원 수정. **완성, 실서비스 작동 중.**
 - **Step 2 AI 모션 매칭**: 씬별 이미지 생성. **완성, 실서비스 작동 중.** `lib/scenes.ts`가 Step1 대본을 `**[3초 훅]**` 등 마커로 씬 분할. n8n `generate-scene-image` 웹훅: Webhook → Gemini(나레이션→영어 시각 프롬프트 변환, 아래 참고) → fal.ai(`flux/schnell`, `image_size: portrait_16_9`) → Respond. 사용자가 직접 이미지 업로드(Supabase Storage `scene-uploads` 버킷)하거나 프롬프트 직접 입력해서 재생성 가능. **1차는 Fal.ai만, 이후 Hedra/D-ID/Seedance 2.5로 확장 + 멤버십 등급별 선택권 차등 제공 예정(아직 미착수).**
-- **Step 3 최종 렌더링**: 자막 스타일 → Creatomate 믹싱·자막 → 최종 MP4. **진행 중, 아직 미완성 — 아래 "진행 상황" 참고.** BGM은 실제 음원 소스가 없어서 이번 라운드에서는 뺌(UI에 "준비 중"으로 비활성 표시만). 인스타그램 자동 발행 버튼도 UI만 있고 비활성화(Instagram Graph API 연동은 별도 작업).
+- **Step 3 최종 렌더링**: 자막 스타일 → Creatomate 믹싱·자막 → 최종 MP4. **완성, 실서비스 작동 중** (2026-08-15 해결, 아래 "작업 로그" 참고). BGM은 실제 음원 소스가 없어서 이번 라운드에서는 뺌(UI에 "준비 중"으로 비활성 표시만). 인스타그램 자동 발행 버튼도 UI만 있고 비활성화(Instagram Graph API 연동은 별도 작업).
 
 ## 테크 스택 (임의 교체 금지)
 
 - Front: Next.js App Router + Tailwind, Vercel (`www.businessgym.co.kr`가 실제 서비스 도메인, apex는 www로 308 리다이렉트)
+  - **Vercel 계정: `businessgym11@gmail.com`, 팀/스코프 `businessgym11-8014`, 프로젝트명 `business-gym`.** (헷갈리지 말 것: 이 계정에 `saju`라는 완전히 무관한 다른 프로젝트도 있음 — CLI 로그인 시 계정 확인 필수. `npx vercel whoami`로 `businessgym11-8014`인지 꼭 체크.) GitHub `main` 브랜치에 연결되어 push하면 자동 배포됨.
 - DB/Auth: Supabase (유저, MP4 URL, 통계). 이메일 발송은 Resend(SMTP, 도메인 인증 완료) 경유.
 - Automation: n8n (Pikapods, `https://turquoise-koel.pikapod.net`)
 - AI: Gemini(`models/gemini-flash-latest`, 대본/분석), Fal.ai(Step2 1차, 모션/이미지), 추후 Hedra/D-ID/Seedance 2.5(Step2 확장), Creatomate(Step3 렌더)
@@ -49,14 +52,20 @@ alwaysApply: true
 8. **씬 이미지 생성 시 대본 나레이션 텍스트를 그대로 이미지 프롬프트로 쓰면 안 된다.** 나레이션은 "말"이지 "그림 묘사"가 아니라서, 그대로 넣으면 AI가 추상적인 한국어 개념(이직, 대운 등)을 못 그리고 막연히 신비로운 동양풍 이미지로 얼버무린다. **해결**: fal.ai 노드 앞에 Gemini 노드를 하나 더 넣어서 나레이션을 "구체적 인물·행동·배경이 있는 영어 시각 프롬프트"로 먼저 변환한 뒤 fal.ai에 넘긴다. 사용자는 판타지/신비주의보다 **사실적인 사진 스타일**(예: 캐리어 끌고 걷는 직장인 뒷모습, 서류 쌓인 책상에서 머리 감싸쥔 사람)을 선호함 — 타로카드·연기 같은 초자연적 요소는 Gemini 프롬프트에서 명시적으로 금지시켜야 함.
 9. **관련 있어 보여도 워크플로우를 합치면 안 된다.** 대본 생성(1회, Step1)과 씬 이미지 생성(씬마다 독립적으로 여러 번, Step2)은 트리거 시점과 횟수가 다르다 — 합치면 "대본 수정 후 씬 분할" UX가 깨진다. 워크플로우는 파트별로 분리 유지.
 
-## Step 3 (Creatomate) 진행 상황 — 2026-08-15 해결됨
+## 작업 로그 (백업)
 
-**Next.js 코드 완성**: `lib/creatomate.ts`(`buildRenderScript` — 씬 이미지+자막을 Creatomate RenderScript JSON으로 조립, 9:16, 씬당 4초, subtitle 스타일 3종 프리셋), `app/create/actions.ts`의 `renderFinalVideo()`(`N8N_RENDER_VIDEO_WEBHOOK_URL`로 전체 RenderScript를 그대로 POST), `app/create/page.tsx`의 `StepThreePublish`(렌더 버튼, 실제 비디오 플레이어, 다운로드 링크).
+### 2026-08-15 (오전~저녁): Step 3 Creatomate 렌더링 완성 + Vercel 배포
 
-**n8n 워크플로우 "Business Gym - Final Video Render"**: `Webhook(render-video) → Submit Render(HTTP POST api.creatomate.com/v2/renders, body={{ $json.body }}) → Wait(5초) → Check Status(HTTP GET .../renders/{{ $('Submit Render').item.json.id }}) → If($json.status == "succeeded", false→Wait로 루프) → Respond to Webhook(true 경로, { videoUrl: JSON.stringify($json.url) })`. Publish 완료, curl 테스트로 실제 MP4 렌더 성공 확인함.
+**Next.js 코드**: `lib/creatomate.ts`(`buildRenderScript` — 씬 이미지+자막을 Creatomate RenderScript JSON으로 조립, 9:16, 씬당 4초, subtitle 스타일 3종 프리셋), `app/create/actions.ts`의 `renderFinalVideo()`(`N8N_RENDER_VIDEO_WEBHOOK_URL`로 전체 RenderScript를 그대로 POST), `app/create/page.tsx`의 `StepThreePublish`(렌더 버튼, 실제 비디오 플레이어, 다운로드 링크).
 
-**당시 막혔던 두 가지 원인 (Executions 탭에서 확인 후 해결)**:
+**n8n 워크플로우 "Business Gym - Final Video Render"**: `Webhook(render-video) → Submit Render(HTTP POST api.creatomate.com/v2/renders, body={{ $json.body }}) → Wait(5초) → Check Status(HTTP GET .../renders/{{ $('Submit Render').item.json.id }}) → If($json.status == "succeeded", false→Wait로 루프) → Respond to Webhook(true 경로, { videoUrl: JSON.stringify($json.url) })`.
+
+**막혔던 두 가지 원인 (n8n Executions 탭에서 확인 후 해결)**:
 1. **Check Status(`HTTP Request`) 노드의 Authorization 헤더에 `Bearer ` 접두사가 빠져 있었음.** Submit Render 노드는 `Bearer <키>`로 고쳤지만 같은 키를 쓰는 Check Status 노드는 안 고쳐서, Submit Render는 성공하고도 다음 단계인 상태 확인(Check Status)에서 "401 The provided API key is invalid"로 막혀 If/Respond to Webhook에 도달하지 못함(이게 "200 OK + 빈 응답"의 실제 원인). → n8n에서 Check Status 노드 Authorization 값에 `Bearer ` 접두사 추가하고 Publish로 해결.
 2. **`lib/creatomate.ts`의 자막 `font_size: "6.5%"`가 Creatomate에서 유효하지 않은 단위.** Creatomate의 `font_size`는 `px`/`vw`/`vh`/`vmin`/`vmax`만 허용(`%`는 안 됨, `background_x_padding`/`background_y_padding`은 `%` 허용). Submit Render 응답에 `Text.font_size: Expected a number ending with px or vw or vh or vmin or vmax` 에러가 찍혀 있었음. → `"6.5 vmin"`으로 수정.
 
-**로컬 `.env.local`에 `N8N_RENDER_VIDEO_WEBHOOK_URL` 추가함.** Vercel Production에는 아직 미반영 — 배포 전에 Vercel 대시보드에 추가 + 재배포 필요.
+curl로 `render-video` 웹훅에 직접 테스트해서 실제 MP4 렌더 성공 확인함(Backblaze B2에 업로드된 URL 반환).
+
+**Vercel 배포**: 로컬 CLI가 처음엔 `saju`라는 무관한 프로젝트(계정 `woojusaju`)에 잘못 연결되어 있었음 — 절대 그 계정/프로젝트에 손대면 안 됨. `businessgym11@gmail.com`으로 재로그인해서 올바른 `businessgym11-8014` 팀의 `business-gym` 프로젝트를 확인·연결함. `N8N_RENDER_VIDEO_WEBHOOK_URL`을 Vercel Production+Preview 환경변수에 추가하고, 커밋(`794dd77`)을 `origin/main`에 push해서 Git 연동 자동 배포로 Production까지 반영 완료. `www.businessgym.co.kr`에서 배포 확인함.
+
+**다음에 이어서 할 일**: 실제 브라우저 UI로 로그인 후 `/create`에서 Step1→2→3 전체 플로우를 끝까지 밟아본 적은 아직 없음(지금까지는 각 웹훅을 curl로 직접 테스트한 것). BGM 소스 확보, Instagram Graph API 자동 발행, Step2의 Hedra/D-ID/Seedance 확장(멤버십 등급별 차등)은 전부 미착수.
