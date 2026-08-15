@@ -18,11 +18,10 @@ alwaysApply: true
 
 ## `/create` 3스텝 (순서·엔진 고정)
 
-- **Step 1 대본 기획**: 키워드 입력 → Gemini가 떡상 구조 대본 생성 → 회원 수정. **완성, 실서비스 작동 중.**
-- **Step 2 AI 모션 매칭**: 씬별 이미지 생성. **완성, 실서비스 작동 중이지만 이미지 디테일 품질 개선 필요(아래 참고).** `lib/scenes.ts`가 Step1 대본을 `**[3초 훅]**` 등 마커로 씬 분할. n8n `generate-scene-image` 웹훅: Webhook → Gemini(나레이션→영어 시각 프롬프트 변환, 아래 참고) → fal.ai(`flux/schnell`, `image_size: portrait_16_9`) → Respond. 사용자가 직접 이미지 업로드(Supabase Storage `scene-uploads` 버킷)하거나 프롬프트 직접 입력해서 재생성 가능. **1차는 Fal.ai만, 이후 Hedra/D-ID/Seedance 2.5로 확장 + 멤버십 등급별 선택권 차등 제공 예정(아직 미착수).**
-  - **⚠️ 이미지 디테일 강화 필요(2026-08-15 발견)**: n8n의 나레이션→시각 프롬프트 변환 Gemini 노드는 지금 "무엇을 그릴지"(인물·행동·배경)만 지정하고 있어서, 내용은 맞지만 사진 디테일이 밋밋하다. **이 프롬프트에 "Photorealistic, 8K resolution, highly detailed, 시네마틱 조명" 같은 구체적 화질·연출 지시어를 반드시 포함하도록 수정할 것.** (함정 #8과 같은 노드, 같은 프롬프트를 손보면 됨 — 신비주의 금지 지시에 화질 지시어를 추가하는 식으로.)
-  - **📋 향후 계획: Image-to-Video 파이프라인 (아직 미착수)**: 정지 이미지 대신 움직이는 영상으로 결과물을 고도화할 예정. n8n `generate-scene-image` 워크플로우에 fal.ai(또는 별도 노드)의 Image-to-Video 모델 호출을 추가해서, fal.ai `flux/schnell`이 만든 정지 이미지를 짧은 동영상(MP4) 클립으로 한 번 더 변환한 뒤 프론트엔드로 전달하도록 확장한다. 이렇게 되면 `RenderScene`/`buildRenderScript`(Step3)도 `image` element 대신 `video` element를 쓰도록 같이 바뀌어야 함.
-- **Step 3 최종 렌더링**: Creatomate로 씬 이미지를 시퀀스 렌더링해 최종 MP4 생성. **완성, 실서비스 작동 중이지만 자막은 당분간 비활성(2026-08-15, 아래 "작업 로그" 참고).** TTS 음성이 없는 상태에서 대본 전체를 자막으로 얹으면 화면이 지저분해져서, `lib/creatomate.ts`의 Text 오버레이 로직을 완전히 제거하고 지금은 "생성된 씬 이미지의 연속"으로만 렌더링한다(UI의 "자막 스타일" 선택도 BGM처럼 "준비 중" 비활성 표시로 전환). 자막을 다시 붙이려면 TTS 음성 트랙과 함께 재설계해야 함. BGM도 실제 음원 소스가 없어서 이번 라운드에서는 뺌(UI에 "준비 중"으로 비활성 표시만). 인스타그램 자동 발행 버튼도 UI만 있고 비활성화(Instagram Graph API 연동은 별도 작업).
+- **Step 1 대본 기획**: 키워드 입력 → Gemini가 떡상 구조 대본 생성 → 회원 수정. **완성, 실서비스 작동 중.** 분량 선택(10/20/30초)이 n8n 프롬프트에 실제로 반영되도록 연결 완료(2026-08-16, 아래 "작업 로그" 참고).
+- **Step 2 AI 모션 매칭**: 씬별 이미지 생성. **완성, 실서비스 작동 중.** `lib/scenes.ts`가 Step1 대본을 `**[3초 훅]**` 등 마커로 씬 분할. n8n `generate-scene-image` 웹훅: Webhook → Gemini(나레이션→영어 시각 프롬프트 변환, 화질 지시어 포함) → fal.ai(`flux/schnell`, `image_size: portrait_16_9`) → Respond. 사용자가 직접 이미지 업로드(Supabase Storage `scene-uploads` 버킷)하거나 프롬프트 직접 입력해서 재생성 가능. 이미지 디테일 강화(Photorealistic/8K/시네마틱 조명 지시어)와 비율 세팅은 n8n 쪽에서 완료함(2026-08-16). **1차는 Fal.ai만, 이후 Hedra/D-ID/Seedance 2.5로 확장 + 멤버십 등급별 선택권 차등 제공 예정(아직 미착수).**
+  - **📋 진행 중: Image-to-Video 파이프라인**: 정지 이미지 대신 움직이는 영상으로 결과물을 고도화할 예정. Step3의 `lib/creatomate.ts`는 이미 준비 완료(2026-08-16) — 씬 URL이 `.mp4`로 끝나면 자동으로 `video` element로, 아니면 `image` element로 렌더링하는 동적 분기가 들어가 있어서 n8n 쪽만 바뀌면 프론트/Step3 코드 추가 수정 없이 바로 동작함. **아직 안 된 부분: n8n `generate-scene-image` 워크플로우에 fal.ai(또는 별도 노드)의 Image-to-Video 모델 호출을 추가해서, 정지 이미지를 짧은 동영상(MP4) 클립으로 한 번 더 변환한 뒤 그 mp4 URL을 프론트로 반환하도록 만드는 것.**
+- **Step 3 최종 렌더링**: Creatomate로 씬 이미지(또는 향후 영상)를 시퀀스 렌더링해 최종 MP4 생성. **완성, 실서비스 작동 중이지만 자막은 당분간 비활성(2026-08-15, 아래 "작업 로그" 참고).** TTS 음성이 없는 상태에서 대본 전체를 자막으로 얹으면 화면이 지저분해져서, `lib/creatomate.ts`의 Text 오버레이 로직을 완전히 제거하고 지금은 "생성된 씬의 연속"으로만 렌더링한다(UI의 "자막 스타일" 선택도 BGM처럼 "준비 중" 비활성 표시로 전환). 자막을 다시 붙이려면 TTS 음성 트랙과 함께 재설계해야 함. 루트/컴포지션/엘리먼트 전 구간에 `width/height: "100%"`를 명시해서 9:16(1080x1920) 프레임을 꽉 채우도록 고정함(2026-08-16, 아래 "작업 로그" 참고 — 이거 없으면 이미지가 원본 비율대로 작게 배치되어 레터박스가 생김). 씬 URL이 `.mp4`로 끝나면 자동으로 `video` element, 아니면 `image` element로 렌더링하는 동적 분기도 들어가 있어서 Image-to-Video 파이프라인이 붙어도 Step3 코드는 추가 수정이 필요 없음. BGM도 실제 음원 소스가 없어서 이번 라운드에서는 뺌(UI에 "준비 중"으로 비활성 표시만). 인스타그램 자동 발행 버튼도 UI만 있고 비활성화(Instagram Graph API 연동은 별도 작업).
 
 ## 테크 스택 (임의 교체 금지)
 
@@ -55,6 +54,7 @@ alwaysApply: true
 9. **관련 있어 보여도 워크플로우를 합치면 안 된다.** 대본 생성(1회, Step1)과 씬 이미지 생성(씬마다 독립적으로 여러 번, Step2)은 트리거 시점과 횟수가 다르다 — 합치면 "대본 수정 후 씬 분할" UX가 깨진다. 워크플로우는 파트별로 분리 유지.
 10. **Creatomate의 composition 자식 element는 `time`을 명시하지 않으면 전부 0초에서 동시에 렌더링된다.** 씬별 composition 배열을 만들 때 `time: i * perSceneDuration`을 빼먹으면, 겹쳐진 것들 중 맨 위(배열 마지막) 것만 화면에 보이고 나머지는 그 뒤에 가려진 채로 존재한다 — 에러 없이 조용히 "마지막 씬만 전체 길이만큼 나오는" 결과가 나와서 원인 파악이 까다롭다. `lib/creatomate.ts`의 `buildRenderScript()`에서 항상 `time`을 명시적으로 계산해서 넣을 것.
 11. **`lib/scenes.ts`의 씬 분할 정규식은 n8n Step1 프롬프트가 만드는 마커 포맷과 강하게 결합되어 있다.** n8n에서 Gemini 프롬프트 포맷을 바꾸면(예: `**[3초 훅]**` → `**[3초 훅] (0~3초)**`처럼 마커 뒤에 부가 텍스트 추가) 파서가 매칭 실패하고 조용히 문단 단위 폴백으로 빠져서 자막에 마크다운(`#`, `**`, 괄호 설명 등)이 그대로 섞여 나온다. **n8n 프롬프트 포맷을 바꿀 때마다 `lib/scenes.ts`의 `markerRegex`/`narrationMatch`도 같이 확인·수정할 것.** 지금은 `내레이션[:：]?\s*\*{0,2}\s*"([^"]+)"` 패턴으로 나레이션을 따옴표째 뽑아내는 방식이라, 프롬프트가 나레이션을 큰따옴표로 감싸서 출력하는 한 안전하다.
+12. **Creatomate에서 루트 `width`/`height`만 지정하고 그 안의 composition·엘리먼트에 크기를 안 주면 `fit: "cover"`를 줘도 소용없다.** 루트가 9:16(1080x1920)이어도, 자식 composition과 image/video 엘리먼트가 각자 원본 비율대로 작게 배치되면서 검은 레터박스가 생긴다. **씬을 감싸는 모든 composition과 그 안의 image/video 엘리먼트에 `width: "100%", height: "100%"`를 명시적으로 넣어야** `fit: "cover"`가 실제로 프레임을 꽉 채운다.
 
 ## 작업 로그 (백업)
 
@@ -100,3 +100,16 @@ curl로 `render-video` 웹훅에 직접 테스트해서 실제 MP4 렌더 성공
 `npm run build` 통과 확인함.
 
 **다음에 이어서 할 일**: (a) n8n Script Generation 프롬프트에 duration 변수 연결(아직 미완료, 위 "밤" 항목 2번 참고). (b) n8n `generate-scene-image` 워크플로우의 Gemini 프롬프트에 화질 지시어(Photorealistic/8K/시네마틱 조명 등) 추가. (c) fal.ai Image-to-Video 파이프라인 설계·구현 착수. (d) stale `signup_requests`(홍길동) 거절 처리. (e) 자막을 다시 붙이고 싶어지면 TTS 연동부터 먼저 붙여야 함 — 자막만 다시 얹으면 이번에 뺀 이유(지저분함)가 재발함.
+
+### 2026-08-16: n8n duration/화질/비율 프롬프트 완료 + Creatomate 레터박스 수정 + video 동적 분기
+
+사용자가 n8n 쪽 작업을 직접 완료함: Script Generation 프롬프트가 이제 `{{ $json.body.duration }}`(위 "다음에 이어서 할 일" (a))을 실제로 반영하고, `generate-scene-image` 프롬프트에도 화질 지시어((b))와 이미지 비율 세팅이 들어감. 이 두 가지는 n8n 워크플로우 자체 수정이라 이 레포 코드 변경 없음.
+
+그 다음 사용자가 렌더링 결과물을 다시 확인하고 두 가지 코드 수정을 요청함:
+
+1. **9:16 레터박스 수정** → `lib/creatomate.ts`의 루트 컴포지션과 씬별 서브 컴포지션, 그리고 이미지/영상 엘리먼트 자체에 전부 `width: "100%", height: "100%"`를 명시적으로 추가함. 루트 `width: 1080, height: 1920`은 이미 있었지만, 그 아래 컴포지션·엘리먼트에 크기를 안 주면 `fit: "cover"`가 있어도 원본 비율대로 작게 배치되어 검은 레터박스가 생기는 게 원인이었음. 함정 목록에 추가할 만한 내용(다음에 정리).
+2. **video/image 동적 분기 추가** → `buildRenderScript()` 내부에 `resolveElementType(url)` 헬퍼를 추가해서, 씬 URL이 `.mp4`로 끝나면 Creatomate 엘리먼트 `type`을 `"video"`로, 아니면 `"image"`로 자동 지정하도록 함. `RenderScene`의 필드명(`imageUrl`)은 그대로 유지 — 나중에 fal.ai Image-to-Video 파이프라인이 mp4 URL을 반환하기 시작해도 이 필드에 그대로 넣으면 됨. Step2/Step3 다른 코드는 추가 수정 없이 바로 동작.
+
+`npm run build` 통과 확인함.
+
+**다음에 이어서 할 일**: (a) n8n `generate-scene-image` 워크플로우에 실제 fal.ai Image-to-Video 모델 호출을 추가해서 정지 이미지 대신 mp4 URL을 반환하도록 만들기 — 코드 쪽(`lib/creatomate.ts`)은 이미 준비 완료. (b) stale `signup_requests`(홍길동) 거절 처리 — 아직 안 함. (c) 자막 재도입은 TTS 연동 이후로.
