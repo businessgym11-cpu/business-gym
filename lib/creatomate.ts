@@ -33,8 +33,13 @@ function resolveElementType(url: string): "video" | "image" {
  * 잘려나간다(반복 재생은 씬이 어색하게 끊겨 보인다는 피드백으로 폐기,
  * 2026-08-16). 원본 클립이 duration보다 짧으면 다시 검은 화면 문제가
  * 재발하니, Step 2.5 쪽 영상 생성 길이가 항상 perSceneDuration보다
- * 길어야 한다 — n8n LTX-Video 노드의 생성 길이 설정을 충분히 길게
- * (예: 최소 10초 이상) 잡을 것.
+ * 길어야 한다 — n8n 노드의 생성 길이 설정을 충분히 길게 잡을 것.
+ *
+ * video 엘리먼트는 volume: 0으로 음소거한다 — Kling 같은 image-to-video
+ * 모델이 자체적으로 넣는 오디오(가끔 중국어 음성 등 의도치 않은 소리가
+ * 들어감, 2026-08-16 발견)를 최종 결과물에서 배제하기 위함. 나레이션은
+ * 아직 TTS가 없어서(위 Step 3 설명 참고) 어차피 무음으로 렌더링되는 게
+ * 맞다 — 나중에 TTS 오디오 트랙을 붙일 때 이 음소거를 다시 고려할 것.
  */
 export function buildRenderScript(
   scenes: RenderScene[],
@@ -69,7 +74,7 @@ export function buildRenderScript(
                 height: "100%",
                 fit: "cover",
                 ...(elementType === "video"
-                  ? { duration: perSceneDuration }
+                  ? { duration: perSceneDuration, volume: 0 }
                   : {}),
               },
             ],
