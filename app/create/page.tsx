@@ -478,16 +478,27 @@ function StepThreeRender({
       text: scene.text,
     }));
 
-    const result = await renderFinalVideo(renderScenes, duration);
+    try {
+      const result = await renderFinalVideo(renderScenes, duration);
 
-    if (!result.success) {
+      if (!result.success) {
+        setStatus("error");
+        setError(result.error);
+        return;
+      }
+
+      setVideoUrl(result.videoUrl);
+      setStatus("done");
+    } catch {
+      // 렌더링이 너무 오래 걸리면 Vercel/n8n 사이 어딘가에서 연결이
+      // 끊겨서 Server Action 호출 자체가 예외를 던질 수 있다(504 등) —
+      // 이 경우도 반드시 에러 상태로 전환해서 로딩 화면에 무한정
+      // 멈춰있지 않도록 한다.
       setStatus("error");
-      setError(result.error);
-      return;
+      setError(
+        "렌더링 요청이 중간에 끊겼어요. 시간이 오래 걸리는 렌더링일수록 자주 발생할 수 있어요. 다시 시도해주세요."
+      );
     }
-
-    setVideoUrl(result.videoUrl);
-    setStatus("done");
   };
 
   useEffect(() => {
