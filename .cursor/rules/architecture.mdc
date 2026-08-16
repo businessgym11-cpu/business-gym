@@ -14,14 +14,19 @@ alwaysApply: true
 1. **홍보 랜딩** `/` — 홍보, 결제 심사, 로그인, 진입 관문. 회원 앱 기능 넣지 말 것.
 2. **대시보드** `/dashboard` — 회원 비즈니스 데이터 관제탑. 콘텐츠 공장이 아님.
 3. **트렌드 분석** `/trending` — 유튜브/숏츠/릴스/틱톡 인기 콘텐츠 분석. 인사이트는 Step 1 대본 입력으로만 넘김.
-4. **AI 컨텐츠 생성** `/create` — 4스텝 마법사만 담당.
+4. **AI 컨텐츠 생성** `/create` — 3스텝 마법사만 담당.
 
-## `/create` 4스텝 (순서·엔진 고정, 2026-08-16 Step 2.5 추가로 3→4스텝 개편)
+## `/create` 3스텝 — Audio-First 원패스 렌더링 아키텍처 (2026-08-16 전면 재설계, 4스텝→3스텝 롤백)
+
+**2026-08-16 하루 동안 있었던 Step 2.5(비디오 프리뷰/개별 모션 수정) 실험은 전부 롤백됨.** 프론트엔드에서 씬별로 image-to-video를 미리 만들어보고 고르는 방식은 UX·비용(하루 만에 fal.ai $53.84 지출) 양쪽에서 부담이 커서, **최종 렌더링 한 번에 비디오(Kling)+TTS(ElevenLabs)+조립(Creatomate)을 백엔드(n8n)가 전부 처리하는 "Audio-First 원패스" 구조**로 바꿈. 프론트엔드는 정지 이미지 스토리보드를 확정하고 최종 MP4 하나를 받는 역할만 한다.
 
 - **Step 1 대본 기획**: 키워드 입력 → Gemini가 떡상 구조 대본 생성 → 회원 수정. **완성, 실서비스 작동 중.** 분량 선택(10/20/30초)이 n8n 프롬프트에 실제로 반영되도록 연결 완료(2026-08-16).
-- **Step 2 AI 이미지 매칭**: 씬별 정지 이미지 생성. **완성, 실서비스 작동 중.** `lib/scenes.ts`가 Step1 대본을 `**[3초 훅]**` 등 마커로 씬 분할. n8n `generate-scene-image` 웹훅: Webhook → Gemini(나레이션→영어 시각 프롬프트 변환, 화질 지시어 포함) → fal.ai(`flux-1/schnell`, text-to-image) → Respond, `{ imageUrl }`로 정지 이미지 URL만 반환(2026-08-16, 아래 "작업 로그" 참고 — 한때 여기 `image to video` 노드가 붙어서 비디오 URL을 반환하던 시절이 있었는데 Step 2.5로 분리하면서 원복함). 사용자가 직접 이미지 업로드(Supabase Storage `scene-uploads` 버킷)하거나 프롬프트 직접 입력해서 재생성 가능. 이미지 디테일 강화(Photorealistic/8K/시네마틱 조명 지시어)와 비율 세팅은 n8n 쪽에서 완료함(2026-08-16). **1차는 Fal.ai만, 이후 Hedra/D-ID/Seedance 2.5로 확장 + 멤버십 등급별 선택권 차등 제공 예정(아직 미착수).**
-- **Step 2.5 AI 비디오 변환 및 프리뷰/개별 수정** (신규, 2026-08-16 추가): Step 2에서 만든 씬별 정지 이미지를 짧은 동영상(MP4) 클립으로 변환해 미리보기하고, 씬마다 모션 프롬프트를 수정해 개별 재생성할 수 있는 단계. **프론트엔드 + n8n 워크플로우 모두 완성, 실서비스 작동 중(2026-08-16).** `app/create/page.tsx`의 `StepTwoPointFiveVideo`/`SceneVideoCard`가 씬별로 `<video>` 플레이어(비디오가 아직 없으면 정지 이미지를 흐리게 보여줌) + 모션 프롬프트 textarea + "비디오로 변환"/"해당 씬 재생성" 버튼을 렌더링. `app/create/actions.ts`의 `generateSceneVideo(imageUrl, motionPrompt)`가 별도 웹훅(`N8N_GENERATE_VIDEO_WEBHOOK_URL`)에 `{ imageUrl, motionPrompt }`를 POST하고 `{ videoUrl }`을 받는다. 비디오를 만들지 않고 넘어간 씬은 정지 이미지 그대로 Step 3에서 렌더링됨(강제 아님). n8n 새 워크플로우 "Business Gym - Scene Video Conversion": `Webhook → fal.ai Image-to-Video(image_url: {{ $json.body.imageUrl }}, prompt: {{ $json.body.motionPrompt }}) → Respond to Webhook({ videoUrl: JSON.stringify(...) })`. **모델은 2026-08-16 하루 동안 `fal-ai/kling-video/v3/4k/image-to-video`(느림, 2~7분) → `fal-ai/ltx-video-13b-distilled/image-to-video`(빠름, 17초대이지만 `num_frames` 계산 필요) → 최종적으로 `fal-ai/kling-video/v3/turbo/standard/image-to-video`로 정착함**(아래 함정 #14 참고). 이 모델은 `image_url` 파라미터명이 그대로 유지되고, `duration` 파라미터(3~15초 자유 지정, `"10"`으로 설정)로 길이를 직접 지정할 수 있어서 `num_frames` 계산이 필요 없고, 오디오 자동 생성도 없음. 화질과 속도 둘 다 만족스러워서 이걸로 최종 확정(2026-08-16 저녁). 모션 프롬프트는 움직임만 제어하고 인물/장면 내용은 못 바꾼다(함정 #15 참고). **씬별 동시 변환 제한(한 번에 한 씬씩만)은 4K Kling 시절 부하 문제 때문에 넣었던 임시 조치였는데, 가벼운 모델로 바뀌면서 다시 제거함(2026-08-16) — 지금은 여러 씬을 동시에 눌러도 됨.**
-- **Step 3 최종 렌더링**: Creatomate로 씬별 정지 이미지 또는 변환된 영상을 시퀀스 렌더링해 최종 MP4 생성. **완성, 실서비스 작동 중이지만 자막은 당분간 비활성(2026-08-15).** TTS 음성이 없는 상태에서 대본 전체를 자막으로 얹으면 화면이 지저분해져서, `lib/creatomate.ts`의 Text 오버레이 로직을 완전히 제거하고 지금은 "생성된 씬의 연속"으로만 렌더링한다(UI의 "자막 스타일" 선택도 BGM처럼 "준비 중" 비활성 표시로 전환). 자막을 다시 붙이려면 TTS 음성 트랙과 함께 재설계해야 함. 루트/컴포지션/엘리먼트 전 구간에 `width/height: "100%"`를 명시해서 9:16(1080x1920) 프레임을 꽉 채우도록 고정함(2026-08-16 — 이거 없으면 이미지가 원본 비율대로 작게 배치되어 레터박스가 생김). 씬 URL이 `.mp4`로 끝나면 자동으로 `video` element, 아니면 `image` element로 렌더링하는 동적 분기가 들어가 있어서(`RenderScene.imageUrl` 필드에 Step 2.5의 `videoUrl`이 있으면 그걸, 없으면 Step 2의 `imageUrl`을 넣음), Step 2.5 완료 여부와 무관하게 Step 3 코드는 수정 없이 그대로 동작함. BGM도 실제 음원 소스가 없어서 이번 라운드에서는 뺌(UI에 "준비 중"으로 비활성 표시만). 인스타그램 자동 발행 버튼도 UI만 있고 비활성화(Instagram Graph API 연동은 별도 작업).
+- **Step 2 스토리보드(이미지) 확정**: 씬별 정지 이미지 생성/수정 전용 단계(예전엔 "AI 이미지 매칭"이라고 불렀음). **완성, 실서비스 작동 중.** `lib/scenes.ts`가 Step1 대본을 `**[3초 훅]**` 등 마커로 씬 분할. n8n `generate-scene-image` 웹훅: Webhook → Gemini(나레이션→영어 시각 프롬프트 변환, 화질 지시어 포함) → fal.ai(`flux-1/schnell`, text-to-image) → Respond, `{ imageUrl }`로 정지 이미지 URL만 반환. 사용자가 직접 이미지 업로드(Supabase Storage `scene-uploads` 버킷)하거나 프롬프트 직접 입력해서 **이미지를 원하는 만큼 자유롭게 재생성 가능**(비디오/모션은 여기서 안 다룸 — Step 3에서 백엔드가 알아서 처리). 이미지 디테일 강화(Photorealistic/8K/시네마틱 조명 지시어)와 비율 세팅은 n8n 쪽에서 완료함. **1차는 Fal.ai만, 이후 Hedra/D-ID/Seedance 2.5로 확장 + 멤버십 등급별 선택권 차등 제공 예정(아직 미착수).**
+  - **"최종 렌더링" 버튼 = 차감 경고 확인창**: `app/create/page.tsx`의 `StepTwoStoryboard`에서 이미지가 없는 씬이 있으면 버튼이 비활성화되고, 모든 씬에 이미지가 있어야 `window.confirm()`으로 아래 문구의 경고창이 뜨고, 확인해야만 Step 3로 넘어감(취소하면 Step2에 그대로 머묾):
+    > "현재 확정된 스토리보드를 바탕으로 고화질 AI 모션 및 음성 렌더링이 시작됩니다. 렌더링 1회가 차감되며 이후 수정이 불가합니다. 진행하시겠습니까?"
+- **Step 3 최종 렌더링(원패스)**: **프론트엔드 완성, n8n 백엔드는 아직 이 구조로 안 만들어짐(아래 참고).** Step2 진입 시 확정을 거쳐 넘어오면 `app/create/page.tsx`의 `StepThreeRender`가 화면 진입과 동시에(마운트 시 `useEffect`로) 자동으로 렌더링을 시작 — 사용자가 누를 버튼이 따로 없음. `app/create/actions.ts`의 `renderFinalVideo(scenes, duration)`가 확정된 `{ scenes: [{ imageUrl, text }], duration }`을 단일 웹훅(`N8N_RENDER_VIDEO_WEBHOOK_URL`)에 그대로 POST하고, n8n이 씬마다 Kling(image-to-video)과 ElevenLabs(TTS, **API 키 확보 완료, 2026-08-16**)를 오케스트레이션한 뒤 Creatomate로 최종 조립까지 전부 마치고 `{ videoUrl }` 하나만 반환하는 구조. 프론트는 로딩 화면 → 완성 영상 재생/다운로드만 보여주면 되고, 자막 스타일/BGM 선택 UI, 이미지·비디오 혼합 렌더링 분기 같은 예전 로직은 전부 걷어냄(백엔드가 알아서 자막·음성까지 완성해서 주는 구조이므로). 실패 시 "다시 시도" 버튼으로 같은 렌더링을 재호출할 수 있음(단, 재호출도 다시 과금/차감되는 렌더링이라는 걸 사용자가 인지하고 있어야 함).
+  - **⚠️ n8n 쪽에서 처음부터 다시 만들어야 할 것**: 예전 "Business Gym - Final Video Render" 워크플로우는 Next.js가 이미 완성한 Creatomate RenderScript JSON을 받아서 그대로 Creatomate API에 전달만 하는 얇은 프록시였음. 이제는 이 워크플로우가 **직접 오케스트레이션 로직을 가져야 함**: `Webhook({ scenes, duration }) → [씬마다] Kling image-to-video 호출 → [씬마다] ElevenLabs TTS 호출(scene.text로 나레이션 음성 생성) → Creatomate RenderScript를 n8n에서 직접 조립(비디오+음성+자막 싱크, "Audio-First"라는 이름대로 TTS 오디오 길이에 맞춰 씬 타이밍을 잡는 방식 검토 필요) → Creatomate 렌더 제출/폴링 → Respond to Webhook({ videoUrl })`. 이건 이번 세션에서 아직 설계만 하고 실제로 n8n에 구현하지 않음 — 다음 세션에서 진행해야 함.
+  - **⚠️ 타임아웃 리스크**: 이 원패스 구조는 씬마다 Kling 영상 생성 + TTS까지 한 번의 웹훅 호출 안에서 다 끝내야 해서, 예전보다 훨씬 오래 걸릴 수 있음(씬 4개 × Kling 몇십초~몇 분 + TTS + Creatomate 렌더 = 최악의 경우 10분 이상 가능). `renderFinalVideo()`의 fetch 타임아웃을 570초로, `app/create/layout.tsx`의 `maxDuration`을 600초로 늘려뒀지만 **Vercel 플랜(Hobby/Pro)에 따라 실제 허용 한도가 이보다 낮을 수 있음** — 실제 렌더링해보고 타임아웃이 나면 (a) Vercel 플랜 업그레이드, 또는 (b) n8n을 즉시 202 응답 + 별도 상태 조회 웹훅으로 비동기/폴링 구조로 다시 설계하는 것을 검토해야 함.
 
 ## 테크 스택 (임의 교체 금지)
 
@@ -29,9 +34,7 @@ alwaysApply: true
   - **Vercel 계정: `businessgym11@gmail.com`, 팀/스코프 `businessgym11-8014`, 프로젝트명 `business-gym`.** (헷갈리지 말 것: 이 계정에 `saju`라는 완전히 무관한 다른 프로젝트도 있음 — CLI 로그인 시 계정 확인 필수. `npx vercel whoami`로 `businessgym11-8014`인지 꼭 체크.) GitHub `main` 브랜치에 연결되어 push하면 자동 배포됨.
 - DB/Auth: Supabase (유저, MP4 URL, 통계). 이메일 발송은 Resend(SMTP, 도메인 인증 완료) 경유.
 - Automation: n8n (Pikapods, `https://turquoise-koel.pikapod.net`)
-- AI: Gemini(`models/gemini-flash-latest`, 대본/분석), Fal.ai(Step2 정지 이미지 1차, 추후 Hedra/D-ID/Seedance 2.5로 확장 예정 + Step 2.5 Image-to-Video), Creatomate(Step3 렌더)
-
-> **참고**: `app/create/page.tsx`의 실제 `step` state 값은 1/2/3/4(정수)다. "Step 2.5"는 문서·기획상의 개념적 이름일 뿐, 코드에서는 `step === 3`이 Step 2.5(비디오 변환), `step === 4`가 Step 3(최종 렌더링)에 해당한다.
+- AI: Gemini(`models/gemini-flash-latest`, 대본/분석), Fal.ai(Step2 정지 이미지 1차, 추후 Hedra/D-ID/Seedance 2.5로 확장 예정), Kling(image-to-video, Step3 원패스 렌더링 안에서 n8n이 호출), ElevenLabs(TTS, Step3 원패스 렌더링 안에서 n8n이 호출, API 키 확보 완료 2026-08-16), Creatomate(Step3 최종 조립)
 
 프론트는 n8n 웹훅을 호출하고, 결과물 URL·통계는 Supabase에 저장한다. 생성 로직을 Next.js에 직접 넣지 말 것.
 
@@ -62,6 +65,8 @@ alwaysApply: true
 15. **image-to-video 모델의 프롬프트는 "움직임"만 제어하지, 원본 이미지 속 인물의 정체성/외형(나이·성별·얼굴 등)을 바꾸지 못한다.** Step 2.5 모션 프롬프트에 "남자를 60대 노인으로 바꿔줘" 같은 지시를 넣어도 반영 안 됨 — 이건 image-to-video 모델의 근본적인 한계(입력 이미지를 고정된 시각적 기준으로 놓고 그 위에서만 움직임을 생성)이지 버그가 아니다. **인물/장면 내용을 바꾸려면 Step 2로 돌아가서 정지 이미지 자체를 그 내용을 반영한 프롬프트로 재생성해야 한다** — Step 2는 "무엇을 보여줄지"(내용), Step 2.5는 "어떻게 움직일지"(모션)만 담당하는 역할 분리로 이해할 것.
 16. **Creatomate composition 안에 들어가는 video 엘리먼트는 `duration`을 명시하지 않으면 원본 클립 길이만큼만 재생하고 끝나버린다.** 씬 슬롯 길이(`perSceneDuration`)가 원본 클립보다 길면(Step 2.5의 짧은 image-to-video 클립이 이런 경우가 흔함), 클립이 먼저 끝나고 다음 씬이 시작하기 전까지 남는 시간이 **검은 화면**으로 남는다(2026-08-16 발견). `lib/creatomate.ts`의 `buildRenderScript()`에서 video 타입 엘리먼트에 `duration: perSceneDuration`을 명시함. **처음엔 `loop: true`도 같이 켰다가, 사용자 피드백으로 트림(자르기) 방식으로 바꿈**(2026-08-16 후속) — 짧은 클립이 슬롯 안에서 반복 재생되면 씬 중간에 어색하게 리셋되는 느낌이 나서, 대신 Step 2.5에서 슬롯보다 넉넉히 긴 클립을 만들어오게 하고 Creatomate에서는 `duration`만큼만 재생하고 뒷부분을 자르는 방식으로 변경. **이 방식이 성립하려면 원본 클립이 항상 `perSceneDuration`보다 길어야 함** — 짧으면 검은 화면 문제가 재발한다. image 타입 엘리먼트는 이 문제가 없어서(정지 이미지는 컨테이너 duration만큼 자동으로 표시됨) 이 설정이 필요 없음.
 17. **fal.ai는 "만든 영상의 초 단위"로만 과금하지 씬 개수로 과금하지 않는다 — 트림(자르기) 방식(위 함정 #16)을 쓰려면 항상 실제 필요한 길이보다 넉넉하게 생성해야 하는데, 이 여유분을 고정값(예: 항상 10초)으로 잡으면 슬롯이 짧을 때(예: 10초 영상÷4씬=씬당 2.5초) 대부분을 버리면서 비용만 나간다(2026-08-16 발견, 하루 만에 fal.ai에서 $53.84 지출 — 대부분 Kling 4K 티어였지만 고정 길이 생성 자체도 낭비 요인).** `app/create/actions.ts`의 `generateSceneVideo(imageUrl, motionPrompt, targetDurationSeconds)`가 실제 씬 슬롯 길이(`perSceneDuration` = 선택한 전체 길이 ÷ 씬 개수)를 계산해서 n8n에 같이 넘기도록 수정함 — n8n 쪽 `num_frames`(또는 `duration`) 파라미터도 이 값을 받아 동적으로 계산해야 낭비가 최소화됨(다음 참고: n8n 표현식 `{{ (Math.ceil($json.body.targetDurationSeconds) + 1) * 24 + 1 }}`처럼 목표 길이에 버퍼 1초만 더해서 프레임 수를 계산 — 이러면 항상 8n+1 형태가 자동으로 맞아떨어짐, 24가 8의 배수라서).
+
+> **참고(2026-08-16 Audio-First 재설계 이후)**: 위 함정 #10·#12·#13·#14·#16·#17은 전부 `lib/creatomate.ts`(이제 삭제됨)와 Step 2.5(이제 롤백됨)가 이 레포 프론트엔드에 있던 시절에 배운 것들이다. 코드 위치는 사라졌지만 **내용 자체(Creatomate `time`/`width`/`height`/video `duration` 필수, 4K는 낭비, fal.ai 초당 과금, AI 렌더링은 타임아웃을 넉넉히)는 이제 n8n의 "Business Gym - Final Video Render" 워크플로우를 새로 만들 때 그대로 적용해야 하는 지식이다** — n8n이 Kling 호출 + Creatomate RenderScript 조립을 직접 하게 되므로, 이 함정들을 n8n 워크플로우 설계 시 참고할 것.
 
 ## 작업 로그 (백업)
 
@@ -230,3 +235,28 @@ n8n 쪽 Step 2.5 연동 작업은 이제 전부 완료됨.
 **⚠️ n8n 쪽에서 반드시 해줘야 할 것(아직 미반영)**: fal.ai 노드의 길이 파라미터(LTX-Video면 `num_frames`, Kling이면 `duration`)를 고정값 대신 웹훅 바디의 `targetDurationSeconds`를 참조하도록 바꿔야 함. LTX-Video 기준 권장 표현식: `{{ (Math.ceil($json.body.targetDurationSeconds) + 1) * 24 + 1 }}`(목표 길이에 1초 버퍼를 더해 24fps 프레임 수로 환산 — 24가 8의 배수라 결과가 항상 8n+1 형태로 자동으로 맞아떨어짐, LTX-Video가 요구하는 프레임 수 형식). Kling이면 `duration` 파라미터에 `{{ Math.ceil($json.body.targetDurationSeconds) + 1 }}`처럼 초 단위로 올림 + 버퍼 1초 정도로 넣으면 됨(Kling `duration`은 정수 초 단위 enum이라 소수점 안 됨).
 
 **다음에 이어서 할 일**: (a) 사용자가 n8n에서 위 표현식 반영(모델은 LTX-Video로 되돌릴지, Kling Turbo Standard를 유지하되 길이만 동적으로 할지 사용자가 선택). (b) fal.ai 크레딧 충전. (c) 씬별 동시 변환 재테스트. (d) Step 3 최종 렌더링까지 이어서 확인. (e) 씬 3 이미지 60대 남성 재생성 확인, 화면 텍스트/워터마크 여부 확인. (f) stale `signup_requests`(홍길동) 거절 처리 — 아직 안 함.
+
+### 2026-08-16 (12): Audio-First 원패스 렌더링으로 전면 재설계 — Step 2.5 롤백, 3스텝 구조 복귀
+
+사용자가 지금까지의 Step 2.5(비디오 프리뷰/개별 모션 수정) 실험을 전부 롤백하고, `/create`를 **[Step1 대본] → [Step2 스토리보드(이미지) 확정] → [Step3 백엔드 원패스 렌더링(비디오+TTS+자막)]** 3스텝 구조로 재설계해달라고 요청함. 배경: Step 2.5를 프론트엔드에서 씬별로 미리 만들어보게 하는 방식이 UX도 복잡하고 비용도 컸음(하루 만에 fal.ai $53.84) — 대신 사용자가 스토리보드(정지 이미지)만 확정하면, 실제 AI 렌더링(Kling 비디오 + ElevenLabs TTS + Creatomate 조립)은 최종 렌더링 단계에서 n8n이 한 번에 다 처리하는 "원패스" 구조로 단순화. **ElevenLabs API 키는 사용자가 이미 확보함(2026-08-16).**
+
+**프론트엔드 변경(`app/create/page.tsx`, 전면 재작성)**:
+1. `steps` 배열을 3개로 복귀: 대본 기획 / 스토리보드 확정 / 최종 렌더링.
+2. `SceneVideoCard`, `StepTwoPointFiveVideo`, `MOTION_STATUS_DEFAULT`, `DEFAULT_MOTION_PROMPT`, `Clapperboard` 아이콘 등 Step 2.5 관련 코드 전부 삭제.
+3. `SceneState` 타입에서 `motionPrompt`/`videoUrl`/`videoStatus`/`videoError` 필드 제거, 원래대로 이미지 전용 상태로 축소.
+4. `StepTwoMotion` → `StepTwoStoryboard`로 개명. 이미지가 없는 씬이 있으면 "최종 렌더링" 버튼이 비활성화되고, 모든 씬에 이미지가 있으면 클릭 시 `window.confirm()`으로 차감 경고창(문구는 사용자가 정확히 지정: "현재 확정된 스토리보드를 바탕으로 고화질 AI 모션 및 음성 렌더링이 시작됩니다. 렌더링 1회가 차감되며 이후 수정이 불가합니다. 진행하시겠습니까?")을 띄우고, 확인해야만 Step3로 넘어감.
+5. `StepThreePublish` → `StepThreeRender`로 재작성: 화면 진입과 동시에(`useEffect`, `startedRef`로 중복 방지) 자동으로 렌더링을 시작 — 사용자가 누를 버튼이 따로 없는 "복잡한 분기 처리 없이 결과만 기다렸다가 보여주는" 화면. 로딩 → 완성 영상(재생/다운로드) 또는 에러(다시 시도 버튼)만 표시. 자막 스타일/BGM 선택 드롭다운은 전부 제거(백엔드가 자막·음성까지 완성해서 주는 구조라 프론트에서 선택할 게 없어짐).
+6. `CreatePage`의 라우팅을 1→2→3 3단계로 되돌림, subtitle 문구 "4단계면"→"3단계면"으로 복귀.
+
+**서버 액션 변경(`app/create/actions.ts`)**:
+- `generateSceneVideo()` 전체 삭제.
+- `renderFinalVideo(scenes, duration)`를 완전히 재작성 — 더 이상 `lib/creatomate.ts`의 `buildRenderScript()`로 Creatomate RenderScript JSON을 프론트에서 조립하지 않고, 확정된 `{ scenes: [{ imageUrl, text }], duration }`을 그대로 단일 웹훅(`N8N_RENDER_VIDEO_WEBHOOK_URL`)에 POST. 응답은 여전히 `{ videoUrl }` 하나. 원패스 렌더링이 훨씬 오래 걸릴 수 있어서 fetch 타임아웃을 570초로 늘림.
+- `lib/creatomate.ts` **파일 자체를 삭제**(더 이상 이 레포에서 안 씀 — Creatomate 조립 로직은 이제 n8n이 담당).
+- `app/create/layout.tsx`의 `maxDuration`을 300 → 600으로 늘림(원패스 렌더링이 더 오래 걸릴 걸 대비, 다만 Vercel 플랜에 따라 실제 허용치가 낮을 수 있음 — 아래 리스크 참고).
+- `.env.local.example`에서 `N8N_GENERATE_VIDEO_WEBHOOK_URL` 섹션 삭제, `N8N_RENDER_VIDEO_WEBHOOK_URL` 설명을 새 원패스 계약(`{ scenes, duration }` → `{ videoUrl }`)에 맞게 갱신.
+
+`npm run build` 통과 확인함(브라우저 로그인 테스트는 이번에도 못함).
+
+**⚠️ 아직 안 된 것 — 다음 세션 최우선 작업**: n8n의 "Business Gym - Final Video Render" 워크플로우는 아직 예전 구조(Next.js가 만든 RenderScript를 그대로 Creatomate에 전달) 그대로임. 이제 이 워크플로우를 **처음부터 다시 만들어야 함**: `Webhook({ scenes, duration }) → 씬마다 Kling image-to-video → 씬마다 ElevenLabs TTS(scene.text) → n8n이 직접 Creatomate RenderScript 조립(비디오+음성 싱크, "Audio-First"라는 이름대로 TTS 오디오 길이 기준으로 씬 타이밍 결정하는 방식 검토) → Creatomate 렌더 제출/폴링 → Respond({ videoUrl })`. 이번 세션에서는 프론트엔드/코드 쪽만 끝냈고 n8n 쪽은 설계만 하고 미착수 — 다음에 이어받는 쪽이 최우선으로 처리할 것. 참고할 만한 예전 지식은 위 "⚠️ n8n 쪽에서 반드시 해줘야 할 것" 관련 함정들(#10 Creatomate `time` 필수, #12 `width/height:"100%"` 필수, #14 4K는 낭비, #16 video `duration` 필수, #17 fal.ai 초당 과금)에 정리되어 있음.
+
+**다음에 이어서 할 일**: (a) n8n "Final Video Render" 워크플로우를 위 구조로 새로 구축(최우선). (b) 씬별 Kling+TTS+Creatomate 파이프라인 실제 렌더링 테스트, 특히 타임아웃(570초/600초)이 충분한지 확인 — 부족하면 Vercel 플랜 업그레이드 또는 비동기/폴링 구조 재설계. (c) stale `signup_requests`(홍길동) 거절 처리 — 아직 안 함.

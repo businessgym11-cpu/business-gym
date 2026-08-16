@@ -1,13 +1,12 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Sparkles,
   RefreshCw,
   Upload,
   Image as ImageIcon,
   Film,
-  Clapperboard,
   ArrowLeft,
   Play,
   Download,
@@ -20,7 +19,6 @@ import {
 import {
   generateScript,
   generateSceneImage,
-  generateSceneVideo,
   uploadSceneImage,
   renderFinalVideo,
 } from "./actions";
@@ -28,22 +26,18 @@ import { parseScenes, type Scene } from "@/lib/scenes";
 
 const steps = [
   { id: 1, label: "대본 기획" },
-  { id: 2, label: "AI 이미지 매칭" },
-  { id: 3, label: "AI 비디오 변환" },
-  { id: 4, label: "최종 렌더링" },
+  { id: 2, label: "스토리보드 확정" },
+  { id: 3, label: "최종 렌더링" },
 ];
 
-const DEFAULT_MOTION_PROMPT = "Natural and subtle motion, cinematic, high quality";
+const FINALIZE_WARNING =
+  "현재 확정된 스토리보드를 바탕으로 고화질 AI 모션 및 음성 렌더링이 시작됩니다. 렌더링 1회가 차감되며 이후 수정이 불가합니다. 진행하시겠습니까?";
 
 type SceneState = {
   prompt: string;
   imageUrl?: string;
   status: "idle" | "generating" | "uploading" | "error";
   error?: string;
-  motionPrompt: string;
-  videoUrl?: string;
-  videoStatus: "idle" | "generating" | "error";
-  videoError?: string;
 };
 
 function StepProgress({ step }: { step: number }) {
@@ -207,7 +201,7 @@ function StepOneScript({
           className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-blue-500 px-6 py-3.5 font-bold text-white shadow-lg shadow-purple-500/30 transition-all duration-200 hover:scale-105 hover:shadow-xl active:scale-100 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Sparkles className="h-5 w-5" />
-          다음: AI 이미지 매칭하기
+          다음: 스토리보드 확정하기
         </button>
       </div>
     </div>
@@ -359,24 +353,35 @@ function SceneCard({
   );
 }
 
-function StepTwoMotion({
+function StepTwoStoryboard({
   scenes,
   sceneStates,
   updateScene,
   onPrev,
-  onNext,
+  onFinalize,
 }: {
   scenes: Scene[];
   sceneStates: Record<number, SceneState>;
   updateScene: (id: number, patch: Partial<SceneState>) => void;
   onPrev: () => void;
-  onNext: () => void;
+  onFinalize: () => void;
 }) {
+  const missingImages = scenes.some((scene) => !sceneStates[scene.id]?.imageUrl);
+
+  const handleFinalizeClick = () => {
+    if (window.confirm(FINALIZE_WARNING)) {
+      onFinalize();
+    }
+  };
+
   return (
     <div>
       <p className="text-sm text-slate-500">
-        씬(Scene)별로 AI 이미지를 생성해 보세요. 프롬프트를 수정해 다시
-        생성하거나, 마음에 드는 이미지를 직접 업로드할 수도 있어요.
+        씬(Scene)별로 AI 이미지를 생성해서 스토리보드를 완성해 보세요.
+        프롬프트를 수정해 다시 생성하거나, 마음에 드는 이미지를 직접
+        업로드할 수도 있어요. 이미지는 여기서 원하는 만큼 자유롭게
+        수정할 수 있지만, 최종 렌더링을 시작하면 이 스토리보드를 기준으로
+        AI 모션과 음성이 만들어지고 이후 수정이 불가해요.
       </p>
 
       <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-[1fr_1.4fr]">
@@ -404,12 +409,7 @@ function StepTwoMotion({
               key={scene.id}
               scene={scene}
               state={
-                sceneStates[scene.id] ?? {
-                  prompt: scene.text,
-                  status: "idle",
-                  motionPrompt: DEFAULT_MOTION_PROMPT,
-                  videoStatus: "idle",
-                }
+                sceneStates[scene.id] ?? { prompt: scene.text, status: "idle" }
               }
               onChange={(patch) => updateScene(scene.id, patch)}
             />
@@ -417,187 +417,12 @@ function StepTwoMotion({
         </div>
       </div>
 
-      <div className="mt-8 flex items-center justify-between">
-        <button
-          type="button"
-          onClick={onPrev}
-          className="flex items-center gap-2 rounded-xl bg-slate-100 px-5 py-3 text-sm font-semibold text-slate-600 transition-colors duration-200 hover:bg-slate-200"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          이전 단계로
-        </button>
-
-        <button
-          type="button"
-          onClick={onNext}
-          className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-blue-500 px-6 py-3.5 font-bold text-white shadow-lg shadow-purple-500/30 transition-all duration-200 hover:scale-105 hover:shadow-xl active:scale-100"
-        >
-          <Clapperboard className="h-5 w-5" />
-          다음: AI 비디오 변환하기
-        </button>
-      </div>
-    </div>
-  );
-}
-
-const MOTION_STATUS_DEFAULT: Pick<
-  SceneState,
-  "motionPrompt" | "videoStatus"
-> = {
-  motionPrompt: DEFAULT_MOTION_PROMPT,
-  videoStatus: "idle",
-};
-
-function SceneVideoCard({
-  scene,
-  state,
-  onChange,
-  targetDurationSeconds,
-}: {
-  scene: Scene;
-  state: SceneState;
-  onChange: (patch: Partial<SceneState>) => void;
-  targetDurationSeconds: number;
-}) {
-  const busy = state.videoStatus === "generating";
-  const hasImage = Boolean(state.imageUrl);
-
-  const handleGenerate = async () => {
-    if (!state.imageUrl) return;
-    onChange({ videoStatus: "generating", videoError: undefined });
-    const result = await generateSceneVideo(
-      state.imageUrl,
-      state.motionPrompt || DEFAULT_MOTION_PROMPT,
-      targetDurationSeconds
-    );
-
-    if (!result.success) {
-      onChange({ videoStatus: "error", videoError: result.error });
-      return;
-    }
-
-    onChange({
-      videoStatus: "idle",
-      videoUrl: result.videoUrl,
-      videoError: undefined,
-    });
-  };
-
-  return (
-    <div className="flex flex-col rounded-xl border border-slate-200 p-3">
-      <div className="relative aspect-[9/16] overflow-hidden rounded-lg bg-gradient-to-br from-purple-100 via-rose-50 to-blue-50">
-        <span className="absolute left-2 top-2 z-10 rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-bold text-purple-700">
-          씬 {scene.id}
-        </span>
-
-        {state.videoUrl ? (
-          <video
-            src={state.videoUrl}
-            controls
-            loop
-            muted
-            playsInline
-            className="h-full w-full object-cover"
-          />
-        ) : hasImage ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={state.imageUrl}
-            alt={`씬 ${scene.id} 이미지`}
-            className="h-full w-full object-cover opacity-60"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center">
-            <Clapperboard className="h-8 w-8 text-purple-300" />
-          </div>
-        )}
-
-        {busy && (
-          <div className="absolute inset-0 flex items-center justify-center bg-white/70">
-            <Loader2 className="h-6 w-6 animate-spin text-purple-600" />
-          </div>
-        )}
-      </div>
-
-      <textarea
-        value={state.motionPrompt}
-        onChange={(e) => onChange({ motionPrompt: e.target.value })}
-        rows={2}
-        placeholder="모션 프롬프트 (예: 천천히 카메라 줌인, 자연스러운 손동작)"
-        className="mt-2 w-full resize-none rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:border-purple-400 focus:outline-none focus:ring-1 focus:ring-purple-500/30"
-      />
-
-      {!hasImage && (
-        <p className="mt-1.5 text-[11px] font-medium text-amber-600">
-          이전 단계에서 이미지를 먼저 생성해주세요.
+      {missingImages && (
+        <p className="mt-6 rounded-xl bg-amber-50 px-4 py-3 text-sm font-medium text-amber-700">
+          아직 이미지가 없는 씬이 있어요. 모든 씬에 이미지를 채운 뒤 최종
+          렌더링을 시작할 수 있어요.
         </p>
       )}
-
-      {state.videoError && (
-        <p className="mt-1.5 text-[11px] font-medium text-red-500">
-          {state.videoError}
-        </p>
-      )}
-
-      <button
-        type="button"
-        onClick={handleGenerate}
-        disabled={busy || !hasImage}
-        className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg border border-slate-200 px-2 py-1.5 text-[11px] font-medium text-slate-600 transition-colors duration-200 hover:border-purple-300 hover:bg-purple-50 hover:text-purple-700 disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {busy ? (
-          <Loader2 className="h-3 w-3 animate-spin" />
-        ) : (
-          <RefreshCw className="h-3 w-3" />
-        )}
-        {state.videoUrl ? "해당 씬 재생성" : "비디오로 변환"}
-      </button>
-    </div>
-  );
-}
-
-function StepTwoPointFiveVideo({
-  scenes,
-  sceneStates,
-  duration,
-  updateScene,
-  onPrev,
-  onNext,
-}: {
-  scenes: Scene[];
-  sceneStates: Record<number, SceneState>;
-  duration: number;
-  updateScene: (id: number, patch: Partial<SceneState>) => void;
-  onPrev: () => void;
-  onNext: () => void;
-}) {
-  const perSceneDuration = duration / scenes.length;
-
-  return (
-    <div>
-      <p className="text-sm text-slate-500">
-        씬별 이미지를 짧은 동영상으로 변환해 보세요. 모션 프롬프트를 수정해서
-        마음에 안 드는 씬만 다시 만들 수도 있어요. 비디오를 만들지 않은 씬은
-        정지 이미지로 그대로 렌더링돼요.
-      </p>
-
-      <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3">
-        {scenes.map((scene) => (
-          <SceneVideoCard
-            key={scene.id}
-            scene={scene}
-            state={
-              sceneStates[scene.id] ?? {
-                prompt: scene.text,
-                status: "idle",
-                ...MOTION_STATUS_DEFAULT,
-              }
-            }
-            onChange={(patch) => updateScene(scene.id, patch)}
-            targetDurationSeconds={perSceneDuration}
-          />
-        ))}
-      </div>
 
       <div className="mt-8 flex items-center justify-between">
         <button
@@ -611,18 +436,19 @@ function StepTwoPointFiveVideo({
 
         <button
           type="button"
-          onClick={onNext}
-          className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-blue-500 px-6 py-3.5 font-bold text-white shadow-lg shadow-purple-500/30 transition-all duration-200 hover:scale-105 hover:shadow-xl active:scale-100"
+          onClick={handleFinalizeClick}
+          disabled={missingImages}
+          className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-blue-500 px-6 py-3.5 font-bold text-white shadow-lg shadow-purple-500/30 transition-all duration-200 hover:scale-105 hover:shadow-xl active:scale-100 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Film className="h-5 w-5" />
-          다음: 최종 영상 렌더링
+          최종 렌더링
         </button>
       </div>
     </div>
   );
 }
 
-function StepThreePublish({
+function StepThreeRender({
   scenes,
   sceneStates,
   duration,
@@ -633,26 +459,20 @@ function StepThreePublish({
   duration: number;
   onPrev: () => void;
 }) {
-  const [status, setStatus] = useState<"idle" | "rendering" | "error">(
-    "idle"
+  const [status, setStatus] = useState<"rendering" | "done" | "error">(
+    "rendering"
   );
   const [error, setError] = useState("");
   const [videoUrl, setVideoUrl] = useState("");
+  const startedRef = useRef(false);
 
-  const missingImages = scenes.some(
-    (scene) =>
-      !sceneStates[scene.id]?.videoUrl && !sceneStates[scene.id]?.imageUrl
-  );
-
-  const handleRender = async () => {
+  const startRender = async () => {
     setStatus("rendering");
     setError("");
 
     const renderScenes = scenes.map((scene) => ({
-      imageUrl:
-        sceneStates[scene.id]?.videoUrl ||
-        sceneStates[scene.id]?.imageUrl ||
-        "",
+      imageUrl: sceneStates[scene.id]?.imageUrl ?? "",
+      text: scene.text,
     }));
 
     const result = await renderFinalVideo(renderScenes, duration);
@@ -664,8 +484,15 @@ function StepThreePublish({
     }
 
     setVideoUrl(result.videoUrl);
-    setStatus("idle");
+    setStatus("done");
   };
+
+  useEffect(() => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    startRender();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div>
@@ -678,125 +505,67 @@ function StepThreePublish({
         이전 단계로
       </button>
 
-      {missingImages && (
-        <p className="mt-4 rounded-xl bg-amber-50 px-4 py-3 text-sm font-medium text-amber-700">
-          아직 이미지가 없는 씬이 있어요. 이전 단계에서 모든 씬에 이미지를
-          채워주세요.
-        </p>
-      )}
-
-      <div className="mt-6 grid grid-cols-1 gap-10 lg:grid-cols-[auto_1fr] lg:items-center">
-        {/* 비디오 프리뷰 */}
-        <div className="mx-auto w-full max-w-[240px]">
-          <div className="relative aspect-[9/16] overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800 to-slate-900 shadow-lg">
-            {videoUrl ? (
-              <video
-                src={videoUrl}
-                controls
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <>
-                <div className="absolute inset-0 flex items-center justify-center">
-                  {status === "rendering" ? (
-                    <Loader2 className="h-10 w-10 animate-spin text-white/80" />
-                  ) : (
-                    <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white/20">
-                      <Play className="h-6 w-6 fill-white/60 text-white/60" />
-                    </div>
-                  )}
+      <div className="mt-6 flex flex-col items-center">
+        <div className="relative aspect-[9/16] w-full max-w-[280px] overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800 to-slate-900 shadow-lg">
+          {videoUrl ? (
+            <video
+              src={videoUrl}
+              controls
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
+              {status === "error" ? (
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-red-500/20">
+                  <X className="h-6 w-6 text-red-300" />
                 </div>
-                {status === "rendering" && (
-                  <span className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/50 px-3 py-1 text-xs text-white">
-                    렌더링 중... (최대 몇 분 소요)
-                  </span>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* 옵션 */}
-        <div className="mx-auto w-full max-w-sm space-y-6">
-          <div>
-            <label className="text-sm font-semibold text-slate-700">
-              자막 스타일
-            </label>
-            <select
-              disabled
-              className="mt-2 w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-400"
-            >
-              <option>기본 (화이트 볼드) (준비 중)</option>
-              <option>네온 하이라이트 (준비 중)</option>
-              <option>손글씨 감성체 (준비 중)</option>
-            </select>
-            <p className="mt-1 text-xs text-slate-400">
-              자막 오버레이는 준비 중이에요. 음성(TTS) 없이 대본 전체가 화면에
-              덮이면 지저분해서, 지금은 이미지 슬라이드만 렌더링돼요.
-            </p>
-          </div>
-
-          <div>
-            <label className="text-sm font-semibold text-slate-700">
-              배경음악 선택
-            </label>
-            <select
-              disabled
-              className="mt-2 w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-400"
-            >
-              <option>잔잔한 감성 피아노 (준비 중)</option>
-              <option>트렌디 업비트 (준비 중)</option>
-              <option>신비로운 동양풍 (준비 중)</option>
-            </select>
-            <p className="mt-1 text-xs text-slate-400">
-              배경음악 연동은 준비 중이에요. 지금은 이미지 슬라이드만
-              적용됩니다.
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleRender}
-            disabled={status === "rendering" || missingImages}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-blue-500 px-6 py-3.5 font-bold text-white shadow-lg shadow-purple-500/30 transition-all duration-200 hover:scale-[1.02] hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {status === "rendering" ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : (
-              <Film className="h-5 w-5" />
-            )}
-            {videoUrl ? "다시 렌더링" : "최종 영상 만들기"}
-          </button>
-
-          {status === "error" && (
-            <p className="text-sm font-medium text-red-500">{error}</p>
+              ) : (
+                <Loader2 className="h-10 w-10 animate-spin text-white/80" />
+              )}
+              <span className="text-xs text-white/80">
+                {status === "error"
+                  ? "렌더링에 실패했어요."
+                  : "AI 모션·음성 렌더링 중... (최대 몇 분 소요)"}
+              </span>
+            </div>
           )}
         </div>
-      </div>
 
-      <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
-        <a
-          href={videoUrl || undefined}
-          download
-          aria-disabled={!videoUrl}
-          className={`flex items-center justify-center gap-2 rounded-xl border-2 px-6 py-3.5 font-semibold transition-all duration-200 ${
-            videoUrl
-              ? "border-slate-200 text-slate-700 hover:border-purple-300 hover:bg-purple-50 hover:text-purple-700"
-              : "pointer-events-none border-slate-100 text-slate-300"
-          }`}
-        >
-          <Download className="h-5 w-5" />
-          완성본 MP4 다운로드
-        </a>
-        <button
-          type="button"
-          disabled
-          title="인스타그램 연동은 준비 중이에요"
-          className="flex cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-yellow-400 via-pink-500 to-purple-600 px-8 py-3.5 font-bold text-white opacity-50 shadow-lg shadow-pink-500/30"
-        >
-          <Rocket className="h-5 w-5" />
-          인스타그램 릴스로 즉시 발행 (준비 중)
-        </button>
+        {status === "error" && (
+          <div className="mt-4 text-center">
+            <p className="text-sm font-medium text-red-500">{error}</p>
+            <button
+              type="button"
+              onClick={startRender}
+              className="mt-3 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-blue-500 px-5 py-2.5 text-sm font-bold text-white shadow-md shadow-purple-500/20 transition-all duration-200 hover:scale-[1.03]"
+            >
+              <RefreshCw className="h-4 w-4" />
+              다시 시도
+            </button>
+          </div>
+        )}
+
+        {status === "done" && (
+          <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
+            <a
+              href={videoUrl}
+              download
+              className="flex items-center justify-center gap-2 rounded-xl border-2 border-slate-200 px-6 py-3.5 font-semibold text-slate-700 transition-all duration-200 hover:border-purple-300 hover:bg-purple-50 hover:text-purple-700"
+            >
+              <Download className="h-5 w-5" />
+              완성본 MP4 다운로드
+            </a>
+            <button
+              type="button"
+              disabled
+              title="인스타그램 연동은 준비 중이에요"
+              className="flex cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-yellow-400 via-pink-500 to-purple-600 px-8 py-3.5 font-bold text-white opacity-50 shadow-lg shadow-pink-500/30"
+            >
+              <Rocket className="h-5 w-5" />
+              인스타그램 릴스로 즉시 발행 (준비 중)
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -815,15 +584,7 @@ export default function CreatePage() {
   const updateScene = (id: number, patch: Partial<SceneState>) => {
     setSceneStates((prev) => ({
       ...prev,
-      [id]: {
-        ...(prev[id] ?? {
-          prompt: "",
-          status: "idle",
-          motionPrompt: DEFAULT_MOTION_PROMPT,
-          videoStatus: "idle",
-        }),
-        ...patch,
-      },
+      [id]: { ...(prev[id] ?? { prompt: "", status: "idle" }), ...patch },
     }));
   };
 
@@ -834,7 +595,7 @@ export default function CreatePage() {
           AI 콘텐츠 생성 마법사
         </h1>
         <p className="mt-2 text-slate-500">
-          4단계면 당신만의 숏폼이 완성됩니다.
+          3단계면 당신만의 숏폼이 완성됩니다.
         </p>
       </div>
 
@@ -853,30 +614,20 @@ export default function CreatePage() {
           />
         )}
         {step === 2 && (
-          <StepTwoMotion
+          <StepTwoStoryboard
             scenes={scenes}
             sceneStates={sceneStates}
             updateScene={updateScene}
             onPrev={() => setStep(1)}
-            onNext={() => setStep(3)}
+            onFinalize={() => setStep(3)}
           />
         )}
         {step === 3 && (
-          <StepTwoPointFiveVideo
+          <StepThreeRender
             scenes={scenes}
             sceneStates={sceneStates}
             duration={duration}
-            updateScene={updateScene}
             onPrev={() => setStep(2)}
-            onNext={() => setStep(4)}
-          />
-        )}
-        {step === 4 && (
-          <StepThreePublish
-            scenes={scenes}
-            sceneStates={sceneStates}
-            duration={duration}
-            onPrev={() => setStep(3)}
           />
         )}
       </div>

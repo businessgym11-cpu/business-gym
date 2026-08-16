@@ -1,7 +1,6 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { buildRenderScript, type RenderScene } from "@/lib/creatomate";
 
 type GenerateScriptResult =
   | { success: true; script: string }
@@ -15,13 +14,14 @@ type UploadImageResult =
   | { success: true; imageUrl: string }
   | { success: false; error: string };
 
-type GenerateVideoResult =
-  | { success: true; videoUrl: string }
-  | { success: false; error: string };
-
 type RenderVideoResult =
   | { success: true; videoUrl: string }
   | { success: false; error: string };
+
+type RenderScenePayload = {
+  imageUrl: string;
+  text: string;
+};
 
 export async function generateScript(
   keyword: string,
@@ -128,60 +128,6 @@ export async function generateSceneImage(
   }
 }
 
-export async function generateSceneVideo(
-  imageUrl: string,
-  motionPrompt: string,
-  targetDurationSeconds: number
-): Promise<GenerateVideoResult> {
-  const webhookUrl = process.env.N8N_GENERATE_VIDEO_WEBHOOK_URL;
-  const secret = process.env.N8N_WEBHOOK_SECRET;
-
-  if (!webhookUrl || !secret) {
-    return {
-      success: false,
-      error:
-        "AI 비디오 변환 서비스가 아직 연결되지 않았어요. n8n 웹훅 설정을 확인해주세요.",
-    };
-  }
-
-  try {
-    const res = await fetch(webhookUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-webhook-secret": secret,
-      },
-      body: JSON.stringify({ imageUrl, motionPrompt, targetDurationSeconds }),
-      signal: AbortSignal.timeout(280000),
-    });
-
-    if (!res.ok) {
-      return {
-        success: false,
-        error: `비디오 변환에 실패했어요. (status ${res.status})`,
-      };
-    }
-
-    const data = await res.json();
-    const videoUrl = typeof data.videoUrl === "string" ? data.videoUrl : "";
-
-    if (!videoUrl) {
-      return {
-        success: false,
-        error: "AI가 빈 응답을 반환했어요. 다시 시도해주세요.",
-      };
-    }
-
-    return { success: true, videoUrl };
-  } catch {
-    return {
-      success: false,
-      error:
-        "AI 비디오 변환 서비스에 연결할 수 없어요. n8n 워크플로우가 켜져 있는지 확인해주세요.",
-    };
-  }
-}
-
 export async function uploadSceneImage(
   formData: FormData
 ): Promise<UploadImageResult> {
@@ -218,9 +164,21 @@ export async function uploadSceneImage(
   return { success: true, imageUrl: publicUrl };
 }
 
+/**
+ * 확정된 스토리보드(씬별 정지 이미지 + 텍스트 대본)를 n8n 최종 렌더링
+ * 웹훅에 그대로 넘긴다. Kling(비디오)·ElevenLabs(TTS)·Creatomate(조립)를
+ * n8n이 전부 오케스트레이션해서 최종 MP4 하나만 반환하는 원패스 구조라,
+ * Next.js는 RenderScript를 직접 조립하지 않는다(예전엔 lib/creatomate.ts가
+ * 이 역할을 했지만 Audio-First 원패스 재설계로 폐기됨, 2026-08-16).
+ *
+ * 씬마다 Kling 영상 생성 + TTS까지 서버에서 순서대로 처리하기 때문에
+ * 예전 renderFinalVideo()보다 훨씬 오래 걸릴 수 있어서 타임아웃을
+ * 넉넉하게 잡는다 — 그래도 부족하면 n8n 쪽에서 비동기/폴링 구조로
+ * 다시 설계해야 할 수 있음(app/create/layout.tsx의 maxDuration도 같이 고려).
+ */
 export async function renderFinalVideo(
-  scenes: RenderScene[],
-  totalDurationSeconds: number
+  scenes: RenderScenePayload[],
+  duration: number
 ): Promise<RenderVideoResult> {
   const webhookUrl = process.env.N8N_RENDER_VIDEO_WEBHOOK_URL;
   const secret = process.env.N8N_WEBHOOK_SECRET;
@@ -240,8 +198,6 @@ export async function renderFinalVideo(
     };
   }
 
-  const renderScript = buildRenderScript(scenes, totalDurationSeconds);
-
   try {
     const res = await fetch(webhookUrl, {
       method: "POST",
@@ -249,8 +205,8 @@ export async function renderFinalVideo(
         "Content-Type": "application/json",
         "x-webhook-secret": secret,
       },
-      body: JSON.stringify(renderScript),
-      signal: AbortSignal.timeout(180000),
+      body: JSON.stringify({ scenes, duration }),
+      signal: AbortSignal.timeout(570000),
     });
 
     if (!res.ok) {
