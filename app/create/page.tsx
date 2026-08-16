@@ -223,7 +223,10 @@ function SceneCard({
 
   const handleGenerate = async () => {
     onChange({ status: "generating", error: undefined });
-    const result = await generateSceneImage(state.prompt || scene.text);
+    const result = await generateSceneImage(
+      state.prompt || scene.text,
+      scene.visual
+    );
 
     if (!result.success) {
       onChange({ status: "error", error: result.error });

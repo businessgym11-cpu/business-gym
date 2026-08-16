@@ -77,7 +77,8 @@ export async function generateScript(
 }
 
 export async function generateSceneImage(
-  prompt: string
+  prompt: string,
+  sceneDirection?: string
 ): Promise<GenerateImageResult> {
   const webhookUrl = process.env.N8N_GENERATE_IMAGE_WEBHOOK_URL;
   const secret = process.env.N8N_WEBHOOK_SECRET;
@@ -97,7 +98,7 @@ export async function generateSceneImage(
         "Content-Type": "application/json",
         "x-webhook-secret": secret,
       },
-      body: JSON.stringify({ prompt }),
+      body: JSON.stringify({ prompt, sceneDirection }),
       signal: AbortSignal.timeout(60000),
     });
 
