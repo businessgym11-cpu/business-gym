@@ -22,13 +22,18 @@ alwaysApply: true
 
 - **Step 1 대본 기획**: 키워드 입력 → Gemini가 떡상 구조 대본 생성 → 회원 수정. **완성, 실서비스 작동 중.** 분량 선택(10/20/30초)이 n8n 프롬프트에 실제로 반영되도록 연결 완료(2026-08-16).
 - **Step 2 스토리보드(이미지) 확정**: 씬별 정지 이미지 생성/수정 전용 단계(예전엔 "AI 이미지 매칭"이라고 불렀음). **완성, 실서비스 작동 중.** `lib/scenes.ts`가 Step1 대본을 `**[3초 훅]**` 등 마커로 씬 분할. n8n `generate-scene-image` 웹훅: Webhook → Gemini(나레이션→영어 시각 프롬프트 변환, 화질 지시어 포함) → fal.ai(`flux-1/schnell`, text-to-image) → Respond, `{ imageUrl }`로 정지 이미지 URL만 반환. 사용자가 직접 이미지 업로드(Supabase Storage `scene-uploads` 버킷)하거나 프롬프트 직접 입력해서 **이미지를 원하는 만큼 자유롭게 재생성 가능**(비디오/모션은 여기서 안 다룸 — Step 3에서 백엔드가 알아서 처리). 이미지 디테일 강화(Photorealistic/8K/시네마틱 조명 지시어)와 비율 세팅은 n8n 쪽에서 완료함. **1차는 Fal.ai만, 이후 Hedra/D-ID/Seedance 2.5로 확장 + 멤버십 등급별 선택권 차등 제공 예정(아직 미착수).**
-  - **씬의 "화면:" 연출 지시가 이미지 프롬프트에 참고 자료로 전달됨(2026-08-16)**: `lib/scenes.ts`가 대본의 "화면:"/"내레이션:" 구조에서 나레이션뿐 아니라 "화면:" 부분도 `Scene.visual`로 따로 뽑아내고, `generateSceneImage(prompt, sceneDirection)`가 이걸 웹훅 바디의 `sceneDirection` 필드로 같이 넘김. **⚠️ n8n 쪽에서 아직 반영 안 됨**: 지금은 이 필드를 받아도 안 씀 — Gemini 프롬프트-변환 노드가 `{{ $json.body.sceneDirection }}`을 참고하되, **"화면:"에 적힌 그래픽/자막 효과(금화 그래픽, 오행 그래픽, 복주머니 그래픽 등)를 문자 그대로 그리지 말고 그 감정적 의도만 사실적 사진 장면으로 재해석**하도록 프롬프트를 고쳐야 함(기존의 "신비주의 금지, 사실적 사진 스타일" 지시와 같이 적용). 원래 "화면:" 내용과 실제 생성된 이미지가 전혀 안 맞는 문제(사용자가 직접 발견함)를 이걸로 해결하려는 것.
+  - **씬의 "화면:" 연출 지시가 이미지 프롬프트에 참고 자료로 전달됨(2026-08-16)**: `lib/scenes.ts`가 대본의 "화면:"/"내레이션:" 구조에서 나레이션뿐 아니라 "화면:" 부분도 `Scene.visual`로 따로 뽑아내고, `generateSceneImage(prompt, sceneDirection)`가 이걸 웹훅 바디의 `sceneDirection` 필드로 같이 넘김. 코드(`lib/scenes.ts`, `app/create/actions.ts`)는 완성되어 있고, **n8n Gemini 프롬프트-변환 노드가 이 필드를 어떻게 쓸지는 스타일 방향이 한 번 바뀜**:
+    - 최초 계획(2026-08-16 낮): "화면:"의 그래픽 요소(금화/오행/복주머니 그래픽 등)를 문자 그대로 그리지 말고 감정적 의도만 사실적 사진으로 재해석하는 방식 — 기존 "신비주의 금지, 사실적 사진 스타일" 원칙을 유지하려 했음.
+    - **⚠️ 방향 전환(2026-08-16 밤)**: 사용자가 위 방식으로 실제 생성된 이미지를 보고 마음에 안 든다고 판단 → **"화면:" 내용(금화 그래픽, 오행 그래픽, 복주머니 그래픽 등)을 문자 그대로 살려서 일러스트/그래픽 스타일로 그리는 방향으로 전환하기로 결정함.** 즉 "사실적 사진 재해석" 원칙(함정 #8)을 이 필드에 한해서 뒤집는 것 — Gemini 프롬프트-변환 노드가 `{{ $json.body.sceneDirection }}`에 적힌 그래픽 요소를 그대로 시각 프롬프트에 반영하도록(일러스트/그래픽 효과 허용) 고쳐야 함. **급하지 않음(사용자가 "꼭 당장 안해도 돼"라고 명시) — 비동기/폴링 n8n 재구성이 끝난 뒤 다음 순서로 진행.** n8n 쪽 반영은 아직 안 됨.
   - **"최종 렌더링" 버튼 = 차감 경고 확인창**: `app/create/page.tsx`의 `StepTwoStoryboard`에서 이미지가 없는 씬이 있으면 버튼이 비활성화되고, 모든 씬에 이미지가 있어야 `window.confirm()`으로 아래 문구의 경고창이 뜨고, 확인해야만 Step 3로 넘어감(취소하면 Step2에 그대로 머묾):
     > "현재 확정된 스토리보드를 바탕으로 고화질 AI 모션 및 음성 렌더링이 시작됩니다. 렌더링 1회가 차감되며 이후 수정이 불가합니다. 진행하시겠습니까?"
-- **Step 3 최종 렌더링(원패스)**: **프론트엔드 + n8n 백엔드 모두 완성, mock 데이터로 전체 파이프라인 성공 확인함(2026-08-16 밤).** Step2 진입 시 확정을 거쳐 넘어오면 `app/create/page.tsx`의 `StepThreeRender`가 화면 진입과 동시에(마운트 시 `useEffect`로) 자동으로 렌더링을 시작 — 사용자가 누를 버튼이 따로 없음. `app/create/actions.ts`의 `renderFinalVideo(scenes, duration)`가 확정된 `{ scenes: [{ imageUrl, text }], duration }`을 단일 웹훅(`N8N_RENDER_VIDEO_WEBHOOK_URL`)에 그대로 POST하고, n8n이 씬마다 Kling(image-to-video)과 ElevenLabs(TTS)를 오케스트레이션한 뒤 Creatomate로 최종 조립까지 전부 마치고 `{ videoUrl }` 하나만 반환하는 구조. 프론트는 로딩 화면 → 완성 영상 재생/다운로드만 보여주면 되고, 자막 스타일/BGM 선택 UI, 이미지·비디오 혼합 렌더링 분기 같은 예전 로직은 전부 걷어냄(백엔드가 알아서 자막·음성까지 완성해서 주는 구조이므로). 실패 시 "다시 시도" 버튼으로 같은 렌더링을 재호출할 수 있음(단, 재호출도 다시 과금/차감되는 렌더링이라는 걸 사용자가 인지하고 있어야 함).
-  - **n8n "Business Gym - Final Video Render" 워크플로우 전체 구조** (2026-08-16 완성, 아래 "작업 로그" 참고): `Webhook({scenes, duration}) → Code(씬 배열을 개별 아이템으로 분리 + 인덱스/씬당 길이 부여) → ElevenLabs TTS(씬마다) → Code(오디오 바이너리 실제 크기로 재생 길이 계산 + Supabase 업로드용 파일명/공개 URL 미리 생성) →` 여기서 **두 갈래로 분기**: (1) `HTTP Request(Supabase Storage에 오디오 업로드) → Code(index/audioUrl/durationSeconds 재부착)`, (2) `Kling(fal.ai image-to-video, duration=그 씬의 실제 TTS 길이 기준) → Code(index/videoUrl 재부착)` → **`Merge(index로 매칭해서 두 갈래 합침) → Code(전체 아이템을 한 번에 모아 누적 시간으로 Creatomate RenderScript 조립, "Audio-First"의 핵심) → Submit Render(Creatomate) → Wait → Check Status(폴링) → If → Respond to Webhook({ videoUrl })`**.
-  - **⚠️ 매번 "Publish" 버튼 눌러야 실제 반영됨** — 함정 #3 그대로, 이번에도 재확인함.
-  - **⚠️ 타임아웃 리스크(아직 미검증)**: 이 원패스 구조는 씬마다 Kling 영상 생성 + TTS까지 한 번의 웹훅 호출 안에서 다 끝내야 해서, mock 데이터(짧은 텍스트 2개)로는 문제없이 끝났지만 **실제 4씬짜리 긴 나레이션으로는 훨씬 오래 걸릴 수 있음**(씬 4개 × Kling 몇십초~몇 분 + TTS + Creatomate 렌더 = 최악의 경우 10분 이상 가능). `renderFinalVideo()`의 fetch 타임아웃을 570초로, `app/create/layout.tsx`의 `maxDuration`을 600초로 늘려뒀지만 **Vercel 플랜(Hobby/Pro)에 따라 실제 허용 한도가 이보다 낮을 수 있음** — 실제 `/create`에서 렌더링해보고 타임아웃이 나면 (a) Vercel 플랜 업그레이드, 또는 (b) n8n을 즉시 202 응답 + 별도 상태 조회 웹훅으로 비동기/폴링 구조로 다시 설계하는 것을 검토해야 함.
+- **Step 3 최종 렌더링(원패스 + 비동기/폴링, 2026-08-16 밤 재설계)**: **실제 5씬 대본 테스트에서 n8n 실행 자체는 8분4초 만에 성공했는데 Vercel이 그보다 먼저 504로 연결을 끊어버려서 브라우저가 영원히 로딩에 멈추는 문제가 발견됨** — 단일 요청/응답으로 몇 분짜리 렌더링을 기다리는 구조 자체가 근본적으로 깨져 있었음(함정 #24 참고). 그래서 프론트-n8n 간 통신을 **작업 시작(즉시 응답) + 상태 폴링(Supabase 직접 조회)** 두 단계로 분리하는 비동기 구조로 재설계함.
+  - **새 Supabase 테이블 `render_jobs`**: `id`(uuid, PK, 폴링용 토큰 역할), `status`(`pending`/`done`/`error`), `video_url`, `error_message`, `created_at`/`updated_at`. RLS 활성화 + public-read 정책(uuid가 추측 불가능해서 익명 읽기로도 안전, insert/update는 n8n이 service_role 키로 해서 RLS 우회하므로 별도 정책 불필요).
+  - **`app/create/actions.ts`**: `renderFinalVideo()`를 없애고 `startRenderJob(scenes, duration)` + `checkRenderStatus(jobId)` 두 개로 분리. `startRenderJob()`은 `N8N_RENDER_VIDEO_WEBHOOK_URL`에 `{ scenes, duration }`을 POST하고 **n8n이 render_jobs에 pending 행을 만든 뒤 즉시 응답하는 `{ jobId }`만 기다림**(타임아웃 20초로 충분). `checkRenderStatus()`는 `lib/supabase/server.ts`의 익명 키 클라이언트로 `render_jobs`를 `id`로 직접 조회 — n8n을 다시 호출하지 않음(least-privilege 원칙: 렌더링 상태 조회에 굳이 `SUPABASE_SERVICE_ROLE_KEY` 관리자 클라이언트를 쓸 이유가 없음).
+  - **`app/create/page.tsx`의 `StepThreeRender`**: 마운트 시 자동으로 `startRenderJob()` 호출 → jobId를 받으면 `setTimeout` 기반 재귀 폴링(`pollStatus`, 5초 간격, 최대 15분)으로 `checkRenderStatus()`를 반복 호출 → `status: "done"`이면 videoUrl 표시, `"error"`면 에러 표시+재시도 버튼, 15분 넘도록 `"pending"`이면 타임아웃 에러로 전환. 언마운트/재시도 시 `clearTimeout`으로 폴링 정리.
+  - **`app/create/layout.tsx`의 `maxDuration`을 600 → 30으로 되돌림** — 더 이상 어떤 Server Action도 n8n의 전체 렌더링(몇 분)을 기다리지 않으므로 긴 함수 실행시간이 불필요해짐.
+  - **n8n "Business Gym - Final Video Render" 워크플로우 구조(재구성 필요, 아래 "다음에 이어서 할 일" 참고)**: 기존 `Webhook({scenes, duration}) → Code(씬 분리) → ...` 파이프라인 맨 앞에 **jobId 생성 + `render_jobs`에 pending 행 INSERT + `Respond to Webhook({ jobId })`을 즉시 반환**하는 단계를 추가하고, 같은 실행 안에서 기존 Kling/TTS/Merge/Creatomate 파이프라인을 그대로 이어서 처리한 뒤 **마지막에 `render_jobs` 행을 성공 시 `{status: "done", video_url}`으로, 실패 시 `{status: "error", error_message}`으로 UPDATE**하는 노드를 추가해야 함. 기존 파이프라인 로직(TTS/Kling/Merge/Creatomate 조립)은 그대로 유지 — 앞뒤에 잡 상태 관리 노드만 추가하는 구조.
+  - **⚠️ 매번 "Publish" 버튼 눌러야 실제 반영됨** — 함정 #3 그대로, 이번에도 재확인 필요.
 
 ## 테크 스택 (임의 교체 금지)
 
@@ -76,6 +81,7 @@ alwaysApply: true
 21. **Supabase Storage에 같은 경로로 두 번 POST 업로드하면 "이미 존재함" 에러가 난다(재시도/재실행 시 자주 발생).** 업로드 헤더에 `x-upsert: true`를 추가하면 덮어쓰기가 허용됨. 또한 파일 경로 자체에 `{{ $execution.id }}` 같은 실행별 고유 값을 포함시켜야, 서로 다른 렌더링 요청(다른 영상)끼리 파일이 겹쳐 쓰이는 걸 막을 수 있음 — 씬 인덱스(0,1,2...)는 렌더링 요청마다 항상 같은 값으로 시작하므로 그것만으로는 고유하지 않음.
 22. **n8n에서 "각 아이템마다 여러 API를 순서대로 호출"하는 것 자체는 별도 반복문 노드 없이 자동으로 됨**(아이템이 N개면 다음 노드가 N번 실행됨). 다만 **한 아이템에 대해 서로 다른 API 결과(예: 오디오 URL과 비디오 URL)를 합쳐야 할 때**는, 같은 노드에서 순차로 처리하지 말고 **두 갈래로 병렬 분기했다가 `Merge` 노드(Mode: Combine, Combine By: Matching Fields, 매칭 필드: `index`)로 다시 합치는 구조**가 안전함 — 액션 노드가 `$json`을 덮어쓰는 문제(함정 #19)를 각 분기마다 독립적으로 처리하고 마지막에 `index` 기준으로 재조합하면 됨.
 23. **Creatomate 최종 조립은 "전체 씬을 한 번에 모아서" 처리해야 씬 간 누적 타이밍을 계산할 수 있다** — 개별 씬을 순서대로 처리하는(Run Once for Each Item) 노드로는 "이전 씬들의 길이 합"을 알 수 없음. Merge 노드로 모든 씬을 합친 뒤, **Mode를 `Run Once for All Items`로 설정한 Code 노드**에서 `$input.all()`로 전체 아이템을 가져와 `index` 순으로 정렬하고, 각 씬의 `time`을 "이전 씬들의 실제 TTS 음성 길이 누적 합"으로 계산해야 Audio-First 타이밍이 정확하게 나옴.
+24. **Vercel은 코드로 설정하는 `maxDuration`(함수 실행시간 제한)과는 별개로, 그보다 훨씬 짧은 시간에 플랫폼 자체의 게이트웨이/프록시 레벨에서 504를 반환할 수 있다.** `app/create/layout.tsx`에 `maxDuration: 600`을 설정해뒀는데도, 실제 n8n 렌더링이 8분4초 걸린 실행에서 브라우저 콘솔에 `504` 에러가 찍히고 n8n은 뒤늦게(연결이 끊긴 뒤) 성공했다(2026-08-16 밤). **교훈: 몇 분씩 걸리는 백엔드 작업을 단일 HTTP 요청/응답으로 기다리는 구조는 Vercel에서 근본적으로 신뢰할 수 없다** — `maxDuration`을 아무리 늘려도 소용없을 수 있음. 해결책은 항상 **비동기/폴링**: 프론트가 "시작" 요청을 보내면 백엔드(n8n)가 작업 ID를 즉시 반환하고, 실제 처리는 백그라운드에서 계속하며, 프론트는 별도의 짧은 "상태 조회" 요청을 몇 초 간격으로 반복해서 완료 여부를 확인하는 구조로 설계해야 한다(Step3의 `render_jobs` 테이블 + `startRenderJob`/`checkRenderStatus` 패턴 참고). 예외 처리도 중요: Server Action이 504로 인해 예외를 던지는 경우를 try/catch로 반드시 잡아야 한다 — 안 그러면 프론트가 로딩 화면에 영원히 멈춰있고 에러조차 표시 안 됨.
 
 ## 작업 로그 (백업)
 
@@ -312,3 +318,28 @@ Claude가 직접 n8n에 접속/조작할 수 없어서(로그인/자격증명 �
 **⚠️ 근본 문제는 아직 미해결**: 단순히 타임아웃 숫자를 더 늘리는 걸로는 안 될 가능성이 높음(플랫폼 자체의 게이트웨이 제한일 수 있어서) — 다음 세션에서 **비동기/폴링 구조로 재설계**하는 걸 검토해야 함: n8n이 렌더링을 시작하자마자 즉시 "접수함" 같은 응답을 먼저 주고, 프론트가 몇 초 간격으로 별도 "상태 조회" 웹훅을 폴링하는 방식. 이러면 프론트-Vercel 연결은 순식간에 끝나고, 실제 오래 걸리는 렌더링은 n8n 안에서 백그라운드로 진행되며, 완료 여부는 프론트가 짧은 폴링 요청으로 계속 확인하는 구조가 됨 — Step3 최종 렌더링(Creatomate)에서 이미 썼던 "Submit → Wait → Check Status → If" 폴링 패턴과 비슷한 원리를 웹훅 계층에서도 한 번 더 적용하는 셈.
 
 **다음에 이어서 할 일**: (a) **최우선**: 렌더링 응답 구조를 비동기/폴링 방식으로 재설계(Next.js 액션이 즉시 반환 + 별도 상태 조회 API/웹훅 추가) — 현재 구조로는 5씬 이상 대본에서 매번 504가 날 가능성이 높음. (b) n8n Script Generation/Scene Image Generation 프롬프트 반영(전 항목 (a)~(c), 아직 실제 재확인 안 됨 — 렌더링이 504로 안 끝나서 최종 결과물 품질 확인을 못함). (c) stale `signup_requests`(홍길동) 거절 처리 — 아직 안 함.
+
+### 2026-08-16 (16): 비동기/폴링 렌더링 구조로 재설계 — 프론트/코드 쪽 완료, n8n 재구성은 다음 단계
+
+위 (15)에서 확인된 Vercel 504 문제(함정 #24)를 근본적으로 해결하기 위해, 사용자 요청("지금 바로 이어서 진행하자")에 따라 렌더링 트리거를 비동기/폴링 구조로 재설계함. **이번 세션에서는 Next.js 코드 + Supabase 테이블 SQL까지 완료, n8n 워크플로우 재구성은 다음 세션 최우선 작업으로 남음.**
+
+**Supabase**: `render_jobs` 테이블 신규 생성 SQL 작성함(`id uuid PK default gen_random_uuid()`, `status`(`pending`/`done`/`error`, check 제약), `video_url`, `error_message`, `created_at`/`updated_at`, RLS 활성화 + public-read 정책). uuid 자체가 추측 불가능한 폴링 토큰 역할을 하므로 읽기는 완전 공개로 열어둠 — insert/update는 n8n이 service_role 키로 하니 RLS를 우회해서 별도 정책 불필요.
+
+**`app/create/actions.ts`**: `renderFinalVideo()` 삭제, 대신 두 함수로 분리:
+- `startRenderJob(scenes, duration)`: 기존과 동일하게 `N8N_RENDER_VIDEO_WEBHOOK_URL`에 `{ scenes, duration }` POST하지만, 이제 n8n이 **즉시** `{ jobId }`만 반환하면 되므로 타임아웃을 570초 → 20초로 대폭 줄임.
+- `checkRenderStatus(jobId)`: n8n을 다시 호출하지 않고 `lib/supabase/server.ts`의 익명 키 클라이언트로 `render_jobs` 테이블을 `id`로 직접 SELECT. `SUPABASE_SERVICE_ROLE_KEY` 관리자 클라이언트(`lib/supabase/admin.ts`)는 일부러 안 씀 — 상태 조회는 공개 정보이니 최소 권한 원칙상 admin 클라이언트를 쓸 이유가 없다고 판단.
+
+**`app/create/page.tsx`의 `StepThreeRender`**: `startRender()`가 이제 `startRenderJob()`만 호출하고 jobId를 받으면 `pollStatus(jobId, startedAt)`를 실행 — `setTimeout` 재귀로 5초 간격 폴링, `checkRenderStatus()` 결과가 `done`이면 videoUrl 표시, `error`면 에러+재시도 버튼, 15분(`MAX_POLL_MS`)이 지나도 `pending`이면 타임아웃 에러로 전환. `pollTimeoutRef`로 언마운트/재시도 시 이전 폴링을 정리함.
+
+**`app/create/layout.tsx`**: `maxDuration`을 600 → 30으로 되돌림 — 이제 어떤 Server Action도 n8n의 전체 렌더링을 기다리지 않으므로 긴 함수 실행시간이 불필요.
+
+`npx tsc --noEmit` 통과 확인함(브라우저 로그인 재검증은 이번에도 못함).
+
+**⚠️ 아직 안 된 것 — 다음 세션 최우선**: n8n "Business Gym - Final Video Render" 워크플로우가 아직 예전 구조(끝까지 다 처리한 뒤에야 `Respond to Webhook`) 그대로라서, **지금 이 상태로는 프론트가 `startRenderJob()`을 호출해도 20초 안에 jobId 응답을 못 받아 여전히 타임아웃 에러가 남**. 다음에 이어받는 쪽이 n8n에서 직접 해야 할 작업:
+1. Webhook 노드 직후에 jobId 생성(예: Code 노드에서 `crypto.randomUUID()` 또는 n8n 표현식) + Supabase `render_jobs`에 `{ id: jobId, status: 'pending' }` INSERT(HTTP Request, service_role 키) 추가.
+2. 그 직후 `Respond to Webhook({ jobId })`를 배치해서 여기서 일단 응답을 끝냄(주의: n8n의 Respond to Webhook은 실행 자체를 종료시키지 않고 뒤 노드가 계속 실행됨 — 이 특성을 활용하는 것).
+3. 기존 파이프라인(씬 분리 → TTS → Kling/오디오업로드 병렬 → Merge → Creatomate 조립 → Submit Render → Wait → Check Status → If)은 그대로 이어서 실행되도록 둠.
+4. 맨 끝에 성공 시 `render_jobs` 행을 `{ status: 'done', video_url }`로 UPDATE, Creatomate 실패나 중간 에러 발생 시(에러 트리거/워크플로우 설정) `{ status: 'error', error_message }`로 UPDATE하는 노드 추가.
+5. Publish 필수(함정 #3).
+
+**다음에 이어서 할 일**: (a) **최우선**: 위 n8n 재구성 5단계 진행. (b) 완료 후 실제 `/create`에서 5씬 이상 실제 대본으로 처음부터 끝까지 재테스트 — 이번엔 폴링이 504 없이 끝까지 도달하는지가 핵심 확인 포인트. (c) n8n Script Generation/Scene Image Generation 프롬프트 반영 재확인(15번 항목 (b) 그대로, 아직 미확인). (d) stale `signup_requests`(홍길동) 거절 처리 — 아직 안 함.

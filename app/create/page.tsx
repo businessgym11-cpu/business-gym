@@ -20,7 +20,8 @@ import {
   generateScript,
   generateSceneImage,
   uploadSceneImage,
-  renderFinalVideo,
+  startRenderJob,
+  checkRenderStatus,
 } from "./actions";
 import { parseScenes, type Scene } from "@/lib/scenes";
 
@@ -468,10 +469,60 @@ function StepThreeRender({
   const [error, setError] = useState("");
   const [videoUrl, setVideoUrl] = useState("");
   const startedRef = useRef(false);
+  const pollTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+
+  const POLL_INTERVAL_MS = 5000;
+  const MAX_POLL_MS = 15 * 60 * 1000; // n8n 실측 렌더링 시간(8분대)보다 넉넉하게
+
+  const clearPoll = () => {
+    if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current);
+  };
+
+  const pollStatus = (jobId: string, startedAt: number) => {
+    pollTimeoutRef.current = setTimeout(async () => {
+      try {
+        const result = await checkRenderStatus(jobId);
+
+        if (!result.success) {
+          setStatus("error");
+          setError(result.error);
+          return;
+        }
+
+        if (result.status === "done") {
+          setVideoUrl(result.videoUrl ?? "");
+          setStatus("done");
+          return;
+        }
+
+        if (result.status === "error") {
+          setStatus("error");
+          setError(result.error || "렌더링에 실패했어요.");
+          return;
+        }
+
+        if (Date.now() - startedAt > MAX_POLL_MS) {
+          setStatus("error");
+          setError(
+            "렌더링이 예상보다 오래 걸리고 있어요. 잠시 후 다시 시도해주세요."
+          );
+          return;
+        }
+
+        pollStatus(jobId, startedAt);
+      } catch {
+        setStatus("error");
+        setError(
+          "렌더링 상태 확인 중 연결이 끊겼어요. 다시 시도해주세요."
+        );
+      }
+    }, POLL_INTERVAL_MS);
+  };
 
   const startRender = async () => {
     setStatus("rendering");
     setError("");
+    clearPoll();
 
     const renderScenes = scenes.map((scene) => ({
       imageUrl: sceneStates[scene.id]?.imageUrl ?? "",
@@ -479,7 +530,7 @@ function StepThreeRender({
     }));
 
     try {
-      const result = await renderFinalVideo(renderScenes, duration);
+      const result = await startRenderJob(renderScenes, duration);
 
       if (!result.success) {
         setStatus("error");
@@ -487,16 +538,11 @@ function StepThreeRender({
         return;
       }
 
-      setVideoUrl(result.videoUrl);
-      setStatus("done");
+      pollStatus(result.jobId, Date.now());
     } catch {
-      // 렌더링이 너무 오래 걸리면 Vercel/n8n 사이 어딘가에서 연결이
-      // 끊겨서 Server Action 호출 자체가 예외를 던질 수 있다(504 등) —
-      // 이 경우도 반드시 에러 상태로 전환해서 로딩 화면에 무한정
-      // 멈춰있지 않도록 한다.
       setStatus("error");
       setError(
-        "렌더링 요청이 중간에 끊겼어요. 시간이 오래 걸리는 렌더링일수록 자주 발생할 수 있어요. 다시 시도해주세요."
+        "렌더링 요청을 시작하지 못했어요. 다시 시도해주세요."
       );
     }
   };
@@ -505,6 +551,7 @@ function StepThreeRender({
     if (startedRef.current) return;
     startedRef.current = true;
     startRender();
+    return () => clearPoll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
