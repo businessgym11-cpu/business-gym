@@ -15,6 +15,7 @@ import {
   Wand2,
   Loader2,
   X,
+  AlertTriangle,
 } from "lucide-react";
 import {
   generateScript,
@@ -371,11 +372,15 @@ function StepTwoStoryboard({
   onFinalize: () => void;
 }) {
   const missingImages = scenes.some((scene) => !sceneStates[scene.id]?.imageUrl);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const handleFinalizeClick = () => {
-    if (window.confirm(FINALIZE_WARNING)) {
-      onFinalize();
-    }
+    setShowConfirm(true);
+  };
+
+  const handleConfirm = () => {
+    setShowConfirm(false);
+    onFinalize();
   };
 
   return (
@@ -448,6 +453,44 @@ function StepTwoStoryboard({
           최종 렌더링
         </button>
       </div>
+
+      {showConfirm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6"
+          onClick={() => setShowConfirm(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-50">
+              <AlertTriangle className="h-6 w-6 text-amber-500" />
+            </div>
+            <h3 className="mt-4 text-lg font-bold text-slate-900">
+              최종 렌더링을 시작할까요?
+            </h3>
+            <p className="mt-2 text-sm leading-relaxed text-slate-600">
+              {FINALIZE_WARNING}
+            </p>
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowConfirm(false)}
+                className="flex-1 rounded-xl bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-600 transition-colors duration-200 hover:bg-slate-200"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirm}
+                className="flex-1 rounded-xl bg-gradient-to-r from-purple-600 to-blue-500 px-4 py-3 text-sm font-bold text-white shadow-md shadow-purple-500/20 transition-all duration-200 hover:scale-[1.02]"
+              >
+                진행할게요
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
