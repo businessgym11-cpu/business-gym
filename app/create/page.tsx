@@ -570,16 +570,13 @@ function StepThreeRender({
           return;
         }
 
-        if (result.status === "error") {
-          setRenderJob({
-            status: "error",
-            jobId,
-            startedAt,
-            videoUrl: "",
-            error: result.error || "렌더링에 실패했어요.",
-          });
-          return;
-        }
+        // n8n은 씬 하나(예: 타이틀 TTS)가 재시도 끝에 완전히 실패하면 그
+        // 항목만 먼저 Update Job (Error)로 "error" 상태를 써버리지만, 다른
+        // 씬들은 계속 진행되어 몇 분 뒤 Update Job (Done)이 같은 행을
+        // "done"으로 덮어쓰는 경우가 있다(레이스 컨디션). 그래서 "error"를
+        // 봐도 바로 포기하지 않고, pending과 똑같이 폴링을 계속해서 나중에
+        // "done"으로 뒤집히는지 지켜본다 — 최종 실패면 아래 MAX_POLL_MS
+        // 타임아웃이 여전히 잡아준다.
 
         if (Date.now() - startedAt > MAX_POLL_MS) {
           setRenderJob({
