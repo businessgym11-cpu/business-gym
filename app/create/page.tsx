@@ -8,6 +8,7 @@ import {
   Image as ImageIcon,
   Film,
   ArrowLeft,
+  ArrowRight,
   Play,
   Download,
   Rocket,
@@ -40,6 +41,14 @@ type SceneState = {
   imageUrl?: string;
   status: "idle" | "generating" | "uploading" | "error";
   error?: string;
+};
+
+type RenderJobState = {
+  status: "rendering" | "done" | "error";
+  jobId: string;
+  startedAt: number;
+  videoUrl: string;
+  error: string;
 };
 
 function StepProgress({ step }: { step: number }) {
@@ -364,12 +373,16 @@ function StepTwoStoryboard({
   updateScene,
   onPrev,
   onFinalize,
+  hasRender,
+  onViewRender,
 }: {
   scenes: Scene[];
   sceneStates: Record<number, SceneState>;
   updateScene: (id: number, patch: Partial<SceneState>) => void;
   onPrev: () => void;
   onFinalize: () => void;
+  hasRender: boolean;
+  onViewRender: () => void;
 }) {
   const missingImages = scenes.some((scene) => !sceneStates[scene.id]?.imageUrl);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -443,15 +456,27 @@ function StepTwoStoryboard({
           이전 단계로
         </button>
 
-        <button
-          type="button"
-          onClick={handleFinalizeClick}
-          disabled={missingImages}
-          className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-blue-500 px-6 py-3.5 font-bold text-white shadow-lg shadow-purple-500/30 transition-all duration-200 hover:scale-105 hover:shadow-xl active:scale-100 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <Film className="h-5 w-5" />
-          최종 렌더링
-        </button>
+        <div className="flex items-center gap-3">
+          {hasRender && (
+            <button
+              type="button"
+              onClick={onViewRender}
+              className="flex items-center gap-2 rounded-xl border-2 border-purple-200 px-5 py-3.5 font-semibold text-purple-700 transition-all duration-200 hover:border-purple-300 hover:bg-purple-50"
+            >
+              다음 단계로
+              <ArrowRight className="h-4 w-4" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={handleFinalizeClick}
+            disabled={missingImages}
+            className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-blue-500 px-6 py-3.5 font-bold text-white shadow-lg shadow-purple-500/30 transition-all duration-200 hover:scale-105 hover:shadow-xl active:scale-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Film className="h-5 w-5" />
+            최종 렌더링
+          </button>
+        </div>
       </div>
 
       {showConfirm && (
@@ -500,19 +525,22 @@ function StepThreeRender({
   sceneStates,
   duration,
   onPrev,
+  renderJob,
+  setRenderJob,
 }: {
   scenes: Scene[];
   sceneStates: Record<number, SceneState>;
   duration: number;
   onPrev: () => void;
+  renderJob: RenderJobState | null;
+  setRenderJob: (v: RenderJobState) => void;
 }) {
-  const [status, setStatus] = useState<"rendering" | "done" | "error">(
-    "rendering"
-  );
-  const [error, setError] = useState("");
-  const [videoUrl, setVideoUrl] = useState("");
   const startedRef = useRef(false);
   const pollTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+
+  const status = renderJob?.status ?? "rendering";
+  const error = renderJob?.error ?? "";
+  const videoUrl = renderJob?.videoUrl ?? "";
 
   const POLL_INTERVAL_MS = 5000;
   const MAX_POLL_MS = 15 * 60 * 1000; // n8n 실측 렌더링 시간(8분대)보다 넉넉하게
@@ -527,45 +555,60 @@ function StepThreeRender({
         const result = await checkRenderStatus(jobId);
 
         if (!result.success) {
-          setStatus("error");
-          setError(result.error);
+          setRenderJob({ status: "error", jobId, startedAt, videoUrl: "", error: result.error });
           return;
         }
 
         if (result.status === "done") {
-          setVideoUrl(result.videoUrl ?? "");
-          setStatus("done");
+          setRenderJob({
+            status: "done",
+            jobId,
+            startedAt,
+            videoUrl: result.videoUrl ?? "",
+            error: "",
+          });
           return;
         }
 
         if (result.status === "error") {
-          setStatus("error");
-          setError(result.error || "렌더링에 실패했어요.");
+          setRenderJob({
+            status: "error",
+            jobId,
+            startedAt,
+            videoUrl: "",
+            error: result.error || "렌더링에 실패했어요.",
+          });
           return;
         }
 
         if (Date.now() - startedAt > MAX_POLL_MS) {
-          setStatus("error");
-          setError(
-            "렌더링이 예상보다 오래 걸리고 있어요. 잠시 후 다시 시도해주세요."
-          );
+          setRenderJob({
+            status: "error",
+            jobId,
+            startedAt,
+            videoUrl: "",
+            error:
+              "렌더링이 예상보다 오래 걸리고 있어요. 잠시 후 다시 시도해주세요.",
+          });
           return;
         }
 
         pollStatus(jobId, startedAt);
       } catch {
-        setStatus("error");
-        setError(
-          "렌더링 상태 확인 중 연결이 끊겼어요. 다시 시도해주세요."
-        );
+        setRenderJob({
+          status: "error",
+          jobId,
+          startedAt,
+          videoUrl: "",
+          error: "렌더링 상태 확인 중 연결이 끊겼어요. 다시 시도해주세요.",
+        });
       }
     }, POLL_INTERVAL_MS);
   };
 
   const startRender = async () => {
-    setStatus("rendering");
-    setError("");
     clearPoll();
+    const startedAt = Date.now();
 
     const renderScenes = scenes.map((scene) => ({
       imageUrl: sceneStates[scene.id]?.imageUrl ?? "",
@@ -576,24 +619,38 @@ function StepThreeRender({
       const result = await startRenderJob(renderScenes, duration);
 
       if (!result.success) {
-        setStatus("error");
-        setError(result.error);
+        setRenderJob({ status: "error", jobId: "", startedAt, videoUrl: "", error: result.error });
         return;
       }
 
-      pollStatus(result.jobId, Date.now());
+      setRenderJob({
+        status: "rendering",
+        jobId: result.jobId,
+        startedAt,
+        videoUrl: "",
+        error: "",
+      });
+      pollStatus(result.jobId, startedAt);
     } catch {
-      setStatus("error");
-      setError(
-        "렌더링 요청을 시작하지 못했어요. 다시 시도해주세요."
-      );
+      setRenderJob({
+        status: "error",
+        jobId: "",
+        startedAt,
+        videoUrl: "",
+        error: "렌더링 요청을 시작하지 못했어요. 다시 시도해주세요.",
+      });
     }
   };
 
   useEffect(() => {
     if (startedRef.current) return;
     startedRef.current = true;
-    startRender();
+
+    if (!renderJob) {
+      startRender();
+    } else if (renderJob.status === "rendering") {
+      pollStatus(renderJob.jobId, renderJob.startedAt);
+    }
     return () => clearPoll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -629,7 +686,7 @@ function StepThreeRender({
               <span className="text-xs text-white/80">
                 {status === "error"
                   ? "렌더링에 실패했어요."
-                  : "AI 모션·음성 렌더링 중... (최대 몇 분 소요)"}
+                  : "AI 모션·음성 렌더링 중... (10~15분 정도 소요돼요)"}
               </span>
             </div>
           )}
@@ -682,6 +739,7 @@ export default function CreatePage() {
   const [sceneStates, setSceneStates] = useState<Record<number, SceneState>>(
     {}
   );
+  const [renderJob, setRenderJob] = useState<RenderJobState | null>(null);
 
   const scenes = useMemo(() => parseScenes(script), [script]);
 
@@ -690,6 +748,11 @@ export default function CreatePage() {
       ...prev,
       [id]: { ...(prev[id] ?? { prompt: "", status: "idle" }), ...patch },
     }));
+    // 씬 이미지가 바뀌면 이전에 완성된 영상은 더 이상 최신 스토리보드를
+    // 반영하지 않으므로, 다시 렌더링하기 전까지는 보여주지 않는다.
+    if (patch.imageUrl !== undefined) {
+      setRenderJob(null);
+    }
   };
 
   return (
@@ -723,7 +786,12 @@ export default function CreatePage() {
             sceneStates={sceneStates}
             updateScene={updateScene}
             onPrev={() => setStep(1)}
-            onFinalize={() => setStep(3)}
+            onFinalize={() => {
+              setRenderJob(null);
+              setStep(3);
+            }}
+            hasRender={!!renderJob}
+            onViewRender={() => setStep(3)}
           />
         )}
         {step === 3 && (
@@ -732,6 +800,8 @@ export default function CreatePage() {
             sceneStates={sceneStates}
             duration={duration}
             onPrev={() => setStep(2)}
+            renderJob={renderJob}
+            setRenderJob={setRenderJob}
           />
         )}
       </div>
