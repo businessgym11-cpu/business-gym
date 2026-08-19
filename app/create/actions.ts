@@ -29,7 +29,8 @@ type RenderScenePayload = {
 
 export async function generateScript(
   keyword: string,
-  durationSeconds: number
+  durationSeconds: number,
+  benchmarkAnalysis?: string
 ): Promise<GenerateScriptResult> {
   const webhookUrl = process.env.N8N_GENERATE_SCRIPT_WEBHOOK_URL;
   const secret = process.env.N8N_WEBHOOK_SECRET;
@@ -49,7 +50,11 @@ export async function generateScript(
         "Content-Type": "application/json",
         "x-webhook-secret": secret,
       },
-      body: JSON.stringify({ keyword, duration: durationSeconds }),
+      body: JSON.stringify({
+        keyword,
+        duration: durationSeconds,
+        benchmarkAnalysis,
+      }),
       signal: AbortSignal.timeout(30000),
     });
 

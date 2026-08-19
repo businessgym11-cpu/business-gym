@@ -108,6 +108,7 @@ function StepOneScript({
   setDuration,
   onNext,
   initialKeyword,
+  initialBenchmarkContext,
 }: {
   script: string;
   setScript: (v: string) => void;
@@ -115,8 +116,10 @@ function StepOneScript({
   setDuration: (v: number) => void;
   onNext: () => void;
   initialKeyword?: string;
+  initialBenchmarkContext?: string;
 }) {
   const [keyword, setKeyword] = useState(initialKeyword ?? "");
+  const [benchmarkContext] = useState(initialBenchmarkContext ?? "");
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
 
@@ -129,7 +132,11 @@ function StepOneScript({
     setGenerating(true);
     setError("");
 
-    const result = await generateScript(keyword.trim(), duration);
+    const result = await generateScript(
+      keyword.trim(),
+      duration,
+      benchmarkContext || undefined
+    );
 
     if (!result.success) {
       setError(result.error);
@@ -147,6 +154,20 @@ function StepOneScript({
         키워드를 입력하면 AI가 떡상 구조 대본을 만들어드려요. 생성 후
         자유롭게 수정하세요.
       </p>
+
+      {benchmarkContext && (
+        <div className="mt-4 rounded-xl bg-purple-50 px-4 py-3">
+          <p className="text-xs font-bold text-purple-700">
+            📊 벤치마킹 참고 자료
+          </p>
+          <p className="mt-1 max-h-32 overflow-y-auto whitespace-pre-wrap text-xs leading-relaxed text-purple-900">
+            {benchmarkContext}
+          </p>
+          <p className="mt-1.5 text-[11px] text-purple-500">
+            AI 대본 생성 시 이 분석을 참고해서 대본을 만들어요.
+          </p>
+        </div>
+      )}
 
       <div className="mt-4 flex items-center gap-2">
         <span className="text-sm font-semibold text-slate-700">
@@ -732,9 +753,25 @@ function StepThreeRender({
   );
 }
 
+const BENCHMARK_HANDOFF_KEY = "bg_benchmark_handoff";
+
+function readBenchmarkHandoff(): string | undefined {
+  if (typeof window === "undefined") return undefined;
+  const raw = sessionStorage.getItem(BENCHMARK_HANDOFF_KEY);
+  if (!raw) return undefined;
+  sessionStorage.removeItem(BENCHMARK_HANDOFF_KEY);
+  try {
+    const parsed = JSON.parse(raw) as { benchmarkAnalysis?: string };
+    return parsed.benchmarkAnalysis;
+  } catch {
+    return undefined;
+  }
+}
+
 function CreatePageContent() {
   const searchParams = useSearchParams();
   const initialKeyword = searchParams.get("topic") ?? undefined;
+  const [initialBenchmarkContext] = useState(readBenchmarkHandoff);
 
   const [step, setStep] = useState(1);
   const [script, setScript] = useState("");
@@ -782,6 +819,7 @@ function CreatePageContent() {
             setDuration={setDuration}
             onNext={() => setStep(2)}
             initialKeyword={initialKeyword}
+            initialBenchmarkContext={initialBenchmarkContext}
           />
         )}
         {step === 2 && (
