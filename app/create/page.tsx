@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Sparkles,
   RefreshCw,
@@ -106,14 +107,16 @@ function StepOneScript({
   duration,
   setDuration,
   onNext,
+  initialKeyword,
 }: {
   script: string;
   setScript: (v: string) => void;
   duration: number;
   setDuration: (v: number) => void;
   onNext: () => void;
+  initialKeyword?: string;
 }) {
-  const [keyword, setKeyword] = useState("");
+  const [keyword, setKeyword] = useState(initialKeyword ?? "");
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
 
@@ -729,7 +732,10 @@ function StepThreeRender({
   );
 }
 
-export default function CreatePage() {
+function CreatePageContent() {
+  const searchParams = useSearchParams();
+  const initialKeyword = searchParams.get("topic") ?? undefined;
+
   const [step, setStep] = useState(1);
   const [script, setScript] = useState("");
   const [duration, setDuration] = useState(30);
@@ -775,6 +781,7 @@ export default function CreatePage() {
             duration={duration}
             setDuration={setDuration}
             onNext={() => setStep(2)}
+            initialKeyword={initialKeyword}
           />
         )}
         {step === 2 && (
@@ -803,5 +810,13 @@ export default function CreatePage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function CreatePage() {
+  return (
+    <Suspense fallback={null}>
+      <CreatePageContent />
+    </Suspense>
   );
 }
