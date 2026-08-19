@@ -10,12 +10,16 @@ import {
   ArrowRight,
   Loader2,
   Sparkles,
+  TrendingUp,
+  Users,
 } from "lucide-react";
 import {
   getTrendResults,
   searchTrendLive,
   analyzeBenchmark,
+  getSurgeVideos,
   type TrendResult,
+  type SurgeVideo,
 } from "./actions";
 
 function formatViews(count: number | null): string {
@@ -38,11 +42,15 @@ function TrendCard({
   benchmark,
   onAnalyze,
   onUseAnalysis,
+  rank,
+  subscriberCount,
 }: {
   item: TrendResult;
   benchmark: BenchmarkState;
   onAnalyze: () => void;
   onUseAnalysis: () => void;
+  rank?: number;
+  subscriberCount?: number | null;
 }) {
   const busy = benchmark.status === "loading";
 
@@ -68,6 +76,11 @@ function TrendCard({
             </div>
           </div>
         )}
+        {rank != null && (
+          <span className="absolute top-2 left-2 flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-r from-purple-600 to-blue-500 text-xs font-extrabold text-white shadow-sm">
+            {rank}
+          </span>
+        )}
         <span className="absolute bottom-2 left-2 flex items-center gap-1 rounded-full bg-black/60 px-2 py-1 text-xs font-medium text-white">
           <Eye className="h-3 w-3" />
           {formatViews(item.viewCount)}
@@ -77,6 +90,16 @@ function TrendCard({
       <p className="mt-3 line-clamp-2 text-sm font-semibold text-slate-800">
         {item.title}
       </p>
+
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+        {item.channelTitle && <span className="truncate">{item.channelTitle}</span>}
+        {subscriberCount != null && (
+          <span className="flex items-center gap-1">
+            <Users className="h-3 w-3" />
+            구독자 {formatViews(subscriberCount)}
+          </span>
+        )}
+      </div>
 
       <div className="mt-3 flex flex-wrap gap-1.5">
         <span className="rounded-full bg-purple-50 px-2.5 py-1 text-xs font-medium text-purple-600">
@@ -135,6 +158,17 @@ export default function TrendingPage() {
   const [benchmarks, setBenchmarks] = useState<Record<string, BenchmarkState>>(
     {}
   );
+
+  const [showSurge, setShowSurge] = useState(false);
+  const [surgeResults, setSurgeResults] = useState<SurgeVideo[]>([]);
+  const [surgeSnapshotDate, setSurgeSnapshotDate] = useState<string | null>(
+    null
+  );
+  const [surgeLoading, setSurgeLoading] = useState(false);
+  const [surgeError, setSurgeError] = useState("");
+  const [surgeBenchmarks, setSurgeBenchmarks] = useState<
+    Record<string, BenchmarkState>
+  >({});
 
   const runSearch = async (query?: string) => {
     setLoading(true);
@@ -211,6 +245,65 @@ export default function TrendingPage() {
     router.push(`/create?topic=${encodeURIComponent(item.title)}`);
   };
 
+  const handleToggleSurge = async () => {
+    if (showSurge) {
+      setShowSurge(false);
+      return;
+    }
+
+    setShowSurge(true);
+    if (surgeResults.length > 0 || surgeLoading) return;
+
+    setSurgeLoading(true);
+    setSurgeError("");
+    const result = await getSurgeVideos();
+    setSurgeLoading(false);
+
+    if (!result.success) {
+      setSurgeError(result.error);
+      return;
+    }
+
+    setSurgeResults(result.results);
+    setSurgeSnapshotDate(result.snapshotDate);
+  };
+
+  const handleSurgeAnalyze = async (item: SurgeVideo) => {
+    setSurgeBenchmarks((prev) => ({ ...prev, [item.id]: { status: "loading" } }));
+
+    const result = await analyzeBenchmark({
+      title: item.title,
+      description: item.description,
+      channelTitle: item.channelTitle,
+      viewCount: item.viewCount,
+      thumbnailUrl: item.thumbnailUrl,
+    });
+
+    if (!result.success) {
+      setSurgeBenchmarks((prev) => ({
+        ...prev,
+        [item.id]: { status: "error", error: result.error },
+      }));
+      return;
+    }
+
+    setSurgeBenchmarks((prev) => ({
+      ...prev,
+      [item.id]: { status: "done", analysis: result.analysis },
+    }));
+  };
+
+  const handleSurgeUseAnalysis = (item: SurgeVideo) => {
+    const benchmark = surgeBenchmarks[item.id];
+    if (benchmark?.status !== "done" || !benchmark.analysis) return;
+
+    sessionStorage.setItem(
+      BENCHMARK_HANDOFF_KEY,
+      JSON.stringify({ topic: item.title, benchmarkAnalysis: benchmark.analysis })
+    );
+    router.push(`/create?topic=${encodeURIComponent(item.title)}`);
+  };
+
   return (
     <div className="mx-auto max-w-7xl px-6 py-10">
       <h1 className="text-2xl font-extrabold text-slate-900 sm:text-3xl">
@@ -254,6 +347,79 @@ export default function TrendingPage() {
           AI 떡상 분석기 돌리기
         </button>
       </div>
+
+      <div className="mt-4">
+        <button
+          type="button"
+          onClick={handleToggleSurge}
+          className="flex items-center gap-2 rounded-xl border border-purple-200 bg-purple-50 px-4 py-2.5 text-sm font-bold text-purple-700 transition-colors duration-200 hover:bg-purple-100"
+        >
+          <TrendingUp className="h-4 w-4" />
+          지난주 급상승 TOP10
+          {showSurge ? " 접기" : " 보기"}
+        </button>
+      </div>
+
+      {showSurge && (
+        <div className="mt-6 rounded-2xl bg-slate-50 p-6">
+          <p className="text-sm text-slate-500">
+            장르 무관, 최근 7일간 구독자 수 대비 조회수가 가장 많이 튄 영상
+            TOP10이에요.
+          </p>
+
+          {surgeLoading && (
+            <div className="mt-6 flex items-center justify-center gap-2 py-12 text-sm text-slate-500">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              불러오는 중...
+            </div>
+          )}
+
+          {!surgeLoading && surgeError && (
+            <p className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
+              {surgeError}
+            </p>
+          )}
+
+          {!surgeLoading && !surgeError && surgeResults.length === 0 && (
+            <p className="mt-6 rounded-xl bg-white px-4 py-6 text-center text-sm text-slate-500">
+              아직 급상승 데이터가 없어요. 매일 아침 자동으로 새로 업데이트돼요.
+            </p>
+          )}
+
+          {!surgeLoading && surgeResults.length > 0 && (
+            <>
+              {surgeSnapshotDate && (
+                <p className="mt-1 text-xs text-slate-400">
+                  {surgeSnapshotDate} 기준
+                </p>
+              )}
+              <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+                {surgeResults.map((item) => (
+                  <TrendCard
+                    key={item.id}
+                    item={{
+                      id: item.id,
+                      keyword: item.keyword ?? "",
+                      title: item.title,
+                      description: item.description,
+                      channelTitle: item.channelTitle,
+                      thumbnailUrl: item.thumbnailUrl,
+                      viewCount: item.viewCount,
+                      videoUrl: item.videoUrl,
+                      publishedAt: item.publishedAt,
+                    }}
+                    rank={item.rank ?? undefined}
+                    subscriberCount={item.subscriberCount}
+                    benchmark={surgeBenchmarks[item.id] ?? { status: "idle" }}
+                    onAnalyze={() => handleSurgeAnalyze(item)}
+                    onUseAnalysis={() => handleSurgeUseAnalysis(item)}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {error && (
         <p className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-600">

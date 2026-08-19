@@ -26,6 +26,24 @@ type SearchTrendLiveResult =
   | { success: true; results: TrendResult[] }
   | { success: false; error: string };
 
+export type SurgeVideo = {
+  id: string;
+  keyword: string | null;
+  title: string;
+  description: string | null;
+  channelTitle: string | null;
+  subscriberCount: number | null;
+  thumbnailUrl: string | null;
+  viewCount: number | null;
+  videoUrl: string;
+  publishedAt: string | null;
+  rank: number | null;
+};
+
+type GetSurgeVideosResult =
+  | { success: true; results: SurgeVideo[]; snapshotDate: string | null }
+  | { success: false; error: string };
+
 /**
  * n8n이 매일 아침 채워 넣는 trend_snapshots에서 가장 최근 스냅샷 날짜의
  * 행만 읽는다(하루치 데이터만 보여줌 — 여러 날짜가 섞이면 순위가 무의미해짐).
@@ -214,4 +232,43 @@ export async function searchTrendLive(
         "실시간 검색 서비스에 연결할 수 없어요. n8n 워크플로우가 켜져 있는지 확인해주세요.",
     };
   }
+}
+
+/**
+ * 장르 무관 급상승 쇼츠 top10을 읽는다. n8n "Business Gym - Surge Videos
+ * Collector" 워크플로우가 매일 아침 surge_videos에 채워 넣은 결과를
+ * Supabase에서 바로 읽기만 한다(별도 웹훅 호출 불필요 — trend_snapshots와
+ * 동일한 패턴).
+ */
+export async function getSurgeVideos(): Promise<GetSurgeVideosResult> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("surge_videos")
+    .select(
+      "id, keyword, title, description, channel_title, subscriber_count, thumbnail_url, view_count, video_url, published_at, rank, snapshot_date"
+    )
+    .order("rank", { ascending: true });
+
+  if (error) {
+    return { success: false, error: "급상승 영상 데이터를 불러오지 못했어요." };
+  }
+
+  return {
+    success: true,
+    snapshotDate: data && data.length > 0 ? data[0].snapshot_date : null,
+    results: (data ?? []).map((row) => ({
+      id: row.id,
+      keyword: row.keyword,
+      title: row.title,
+      description: row.description,
+      channelTitle: row.channel_title,
+      subscriberCount: row.subscriber_count,
+      thumbnailUrl: row.thumbnail_url,
+      viewCount: row.view_count,
+      videoUrl: row.video_url,
+      publishedAt: row.published_at,
+      rank: row.rank,
+    })),
+  };
 }
