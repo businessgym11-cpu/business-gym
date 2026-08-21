@@ -18,6 +18,8 @@ import {
   Loader2,
   X,
   AlertTriangle,
+  UserRound,
+  RefreshCcw,
 } from "lucide-react";
 import {
   generateScript,
@@ -25,6 +27,9 @@ import {
   uploadSceneImage,
   startRenderJob,
   checkRenderStatus,
+  getCharacter,
+  uploadCharacter,
+  type CharacterInfo,
 } from "./actions";
 import { parseScenes, type Scene } from "@/lib/scenes";
 
@@ -101,6 +106,44 @@ function StepProgress({ step }: { step: number }) {
 
 const DURATION_OPTIONS = [10, 20, 30];
 
+const SERIES_FORMATS = [
+  {
+    id: "daily",
+    label: "오늘의 운세",
+    description: "매일 챙겨보는 캐릭터의 짧은 오늘의 운세 + 실천 팁",
+    promptGuide:
+      "이 대본은 '오늘의 운세' 시리즈입니다. 캐릭터가 오늘 하루 특정 띠/성향에 좋은 일과 짧은 실천 팁을 전달하는 데일리 콘텐츠로 작성해주세요. 매일 챙겨보고 싶어지는 습관형 톤으로 써주세요. 대본 마지막에는 '내 사주 무료로 보러가기' 같은 CTA를 자연스럽게 포함해주세요.",
+  },
+  {
+    id: "element-type",
+    label: "나는 무슨 오행?",
+    description: "MBTI처럼 성격을 오행/십성에 빗댄 유형 테스트형",
+    promptGuide:
+      "이 대본은 '나는 무슨 오행?' 시리즈입니다. MBTI 유형 테스트처럼 성격이나 행동 특징을 오행(목화토금수) 또는 십성에 빗대어 소개하고, 시청자가 자신을 대입해볼 수 있도록 작성해주세요. 저장·공유하고 싶어지는 톤으로 써주세요. 대본 마지막에는 '내 사주 무료로 보러가기' 같은 CTA를 자연스럽게 포함해주세요.",
+  },
+  {
+    id: "comment-consult",
+    label: "댓글 사주 상담",
+    description: "댓글로 받은 고민에 캐릭터가 답변하는 참여형",
+    promptGuide:
+      "이 대본은 '댓글 사주 상담' 시리즈입니다. 팔로워가 댓글로 남긴 고민(연애/이직 등)에 캐릭터가 답변하는 형식으로 작성하고, 마지막에 다음 사연을 댓글로 남겨달라는 유도 문구를 포함해주세요.",
+  },
+  {
+    id: "meme",
+    label: "사주 밈/유머",
+    description: "가벼운 유머 톤의 사주 밈 형식",
+    promptGuide:
+      "이 대본은 '사주 밈/유머' 시리즈입니다. 무겁지 않고 가벼운 유머 톤으로, MZ 세대가 공감할 만한 사주 관련 밈 형식으로 작성해주세요. 대본 마지막에는 '내 사주 무료로 보러가기' 같은 CTA를 자연스럽게 포함해주세요.",
+  },
+  {
+    id: "worldview",
+    label: "캐릭터 세계관",
+    description: "단순 점괘가 아닌 캐릭터 스토리/비하인드",
+    promptGuide:
+      "이 대본은 '캐릭터 세계관/비하인드' 시리즈입니다. 단순 점괘 전달이 아니라, 캐릭터에게 스토리와 개성을 부여해서 '하늘의 이야기를 전하러 온 도령'이라는 세계관이 자연스럽게 드러나는 대본으로 작성해주세요.",
+  },
+] as const;
+
 function StepOneScript({
   script,
   setScript,
@@ -120,8 +163,13 @@ function StepOneScript({
 }) {
   const [keyword, setKeyword] = useState(initialKeyword ?? "");
   const [benchmarkContext] = useState(initialBenchmarkContext ?? "");
+  const [seriesFormatId, setSeriesFormatId] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
+
+  const selectedSeriesFormat = SERIES_FORMATS.find(
+    (f) => f.id === seriesFormatId
+  );
 
   const handleGenerate = async () => {
     if (!keyword.trim()) {
@@ -132,10 +180,14 @@ function StepOneScript({
     setGenerating(true);
     setError("");
 
+    const combinedContext = [selectedSeriesFormat?.promptGuide, benchmarkContext]
+      .filter(Boolean)
+      .join("\n\n");
+
     const result = await generateScript(
       keyword.trim(),
       duration,
-      benchmarkContext || undefined
+      combinedContext || undefined
     );
 
     if (!result.success) {
@@ -168,6 +220,44 @@ function StepOneScript({
           </p>
         </div>
       )}
+
+      <div className="mt-4">
+        <span className="text-sm font-semibold text-slate-700">
+          콘텐츠 시리즈 (선택)
+        </span>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setSeriesFormatId(null)}
+            className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors duration-200 ${
+              seriesFormatId === null
+                ? "border-transparent bg-gradient-to-r from-purple-600 to-blue-500 text-white"
+                : "border-slate-200 text-slate-500 hover:bg-slate-50"
+            }`}
+          >
+            없음
+          </button>
+          {SERIES_FORMATS.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => setSeriesFormatId(f.id)}
+              className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors duration-200 ${
+                seriesFormatId === f.id
+                  ? "border-transparent bg-gradient-to-r from-purple-600 to-blue-500 text-white"
+                  : "border-slate-200 text-slate-500 hover:bg-slate-50"
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+        {selectedSeriesFormat && (
+          <p className="mt-1.5 text-xs text-slate-400">
+            {selectedSeriesFormat.description}
+          </p>
+        )}
+      </div>
 
       <div className="mt-4 flex items-center gap-2">
         <span className="text-sm font-semibold text-slate-700">
@@ -247,10 +337,12 @@ function SceneCard({
   scene,
   state,
   onChange,
+  characterImageUrl,
 }: {
   scene: Scene;
   state: SceneState;
   onChange: (patch: Partial<SceneState>) => void;
+  characterImageUrl?: string;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [expanded, setExpanded] = useState(false);
@@ -260,7 +352,8 @@ function SceneCard({
     onChange({ status: "generating", error: undefined });
     const result = await generateSceneImage(
       state.prompt || scene.text,
-      scene.visual
+      scene.visual,
+      characterImageUrl
     );
 
     if (!result.success) {
@@ -295,6 +388,14 @@ function SceneCard({
         <span className="absolute left-2 top-2 z-10 rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-bold text-purple-700">
           씬 {scene.id}
         </span>
+        {characterImageUrl && (
+          <span
+            title="캐릭터 일관성 적용"
+            className="absolute right-2 top-2 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-white/80 text-purple-600"
+          >
+            <UserRound className="h-3 w-3" />
+          </span>
+        )}
 
         {state.imageUrl ? (
           <button
@@ -391,6 +492,159 @@ function SceneCard({
   );
 }
 
+function CharacterPanel({
+  character,
+  loading,
+  useCharacter,
+  onToggleUse,
+  onSaved,
+}: {
+  character: CharacterInfo | null;
+  loading: boolean;
+  useCharacter: boolean;
+  onToggleUse: (v: boolean) => void;
+  onSaved: (character: CharacterInfo) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const frontRef = useRef<HTMLInputElement>(null);
+  const sideRef = useRef<HTMLInputElement>(null);
+  const backRef = useRef<HTMLInputElement>(null);
+
+  const handleSave = async () => {
+    const front = frontRef.current?.files?.[0];
+    const side = sideRef.current?.files?.[0];
+    const back = backRef.current?.files?.[0];
+
+    if (!character && !front) {
+      setError("정면 이미지는 필수예요.");
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+
+    const formData = new FormData();
+    if (front) formData.append("front", front);
+    if (side) formData.append("side", side);
+    if (back) formData.append("back", back);
+
+    const result = await uploadCharacter(formData);
+    setSaving(false);
+
+    if (!result.success) {
+      setError(result.error);
+      return;
+    }
+
+    onSaved(result.character);
+    setEditing(false);
+  };
+
+  if (loading) {
+    return (
+      <div className="mb-6 flex items-center gap-2 rounded-xl border border-slate-200 p-4 text-sm text-slate-400">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        캐릭터 정보 불러오는 중...
+      </div>
+    );
+  }
+
+  if (character && !editing) {
+    return (
+      <div className="mb-6 flex flex-wrap items-center gap-4 rounded-xl border border-purple-200 bg-purple-50/50 p-4">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={character.frontImageUrl}
+          alt="등록된 캐릭터"
+          className="h-16 w-16 rounded-lg object-cover"
+        />
+        <div className="flex-1">
+          <p className="text-sm font-bold text-slate-800">내 캐릭터</p>
+          <p className="text-xs text-slate-500">
+            켜면 모든 씬을 이 캐릭터로 일관되게 생성해요.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => onToggleUse(!useCharacter)}
+          aria-label="캐릭터 사용 토글"
+          className={`flex h-7 w-12 flex-shrink-0 items-center rounded-full px-0.5 transition-colors duration-200 ${
+            useCharacter
+              ? "justify-end bg-gradient-to-r from-purple-600 to-blue-500"
+              : "justify-start bg-slate-200"
+          }`}
+        >
+          <span className="h-6 w-6 rounded-full bg-white shadow-sm" />
+        </button>
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          className="flex flex-shrink-0 items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors duration-200 hover:border-purple-300 hover:bg-white"
+        >
+          <RefreshCcw className="h-3 w-3" />
+          캐릭터 교체
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mb-6 rounded-xl border border-slate-200 p-4">
+      <p className="text-sm font-bold text-slate-800">
+        {character ? "캐릭터 교체" : "내 캐릭터 등록"}
+      </p>
+      <p className="mt-1 text-xs text-slate-500">
+        정면 사진은 필수, 측면·후면은 선택이에요. 등록하면 모든 씬을 이
+        캐릭터로 일관되게 생성할 수 있어요.
+      </p>
+
+      <div className="mt-3 grid grid-cols-3 gap-3">
+        {[
+          { label: "정면 (필수)", ref: frontRef },
+          { label: "측면", ref: sideRef },
+          { label: "후면", ref: backRef },
+        ].map((slot) => (
+          <label
+            key={slot.label}
+            className="flex cursor-pointer flex-col items-center gap-1.5 rounded-lg border border-dashed border-slate-300 px-2 py-4 text-center text-xs text-slate-500 transition-colors duration-200 hover:border-purple-300 hover:bg-purple-50"
+          >
+            <Upload className="h-4 w-4" />
+            {slot.label}
+            <input ref={slot.ref} type="file" accept="image/*" className="hidden" />
+          </label>
+        ))}
+      </div>
+
+      {error && (
+        <p className="mt-2 text-xs font-medium text-red-500">{error}</p>
+      )}
+
+      <div className="mt-3 flex justify-end gap-2">
+        {character && (
+          <button
+            type="button"
+            onClick={() => setEditing(false)}
+            className="rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-100"
+          >
+            취소
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saving}
+          className="flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-blue-500 px-4 py-1.5 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+          저장
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function StepTwoStoryboard({
   scenes,
   sceneStates,
@@ -411,6 +665,23 @@ function StepTwoStoryboard({
   const missingImages = scenes.some((scene) => !sceneStates[scene.id]?.imageUrl);
   const [showConfirm, setShowConfirm] = useState(false);
 
+  const [character, setCharacter] = useState<CharacterInfo | null>(null);
+  const [characterLoading, setCharacterLoading] = useState(true);
+  const [useCharacter, setUseCharacter] = useState(false);
+
+  useEffect(() => {
+    getCharacter().then((result) => {
+      setCharacterLoading(false);
+      if (result.success && result.character) {
+        setCharacter(result.character);
+      }
+    });
+  }, []);
+
+  const activeCharacterImageUrl = useCharacter
+    ? character?.frontImageUrl
+    : undefined;
+
   const handleFinalizeClick = () => {
     setShowConfirm(true);
   };
@@ -429,6 +700,17 @@ function StepTwoStoryboard({
         수정할 수 있지만, 최종 렌더링을 시작하면 이 스토리보드를 기준으로
         AI 모션과 음성이 만들어지고 이후 수정이 불가해요.
       </p>
+
+      <CharacterPanel
+        character={character}
+        loading={characterLoading}
+        useCharacter={useCharacter}
+        onToggleUse={setUseCharacter}
+        onSaved={(c) => {
+          setCharacter(c);
+          setUseCharacter(true);
+        }}
+      />
 
       <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-[1fr_1.4fr]">
         {/* 좌측: 씬별 대본 */}
@@ -458,6 +740,7 @@ function StepTwoStoryboard({
                 sceneStates[scene.id] ?? { prompt: scene.text, status: "idle" }
               }
               onChange={(patch) => updateScene(scene.id, patch)}
+              characterImageUrl={activeCharacterImageUrl}
             />
           ))}
         </div>

@@ -27,6 +27,20 @@ type RenderScenePayload = {
   text: string;
 };
 
+export type CharacterInfo = {
+  frontImageUrl: string;
+  sideImageUrl: string | null;
+  backImageUrl: string | null;
+};
+
+type GetCharacterResult =
+  | { success: true; character: CharacterInfo | null }
+  | { success: false; error: string };
+
+type SaveCharacterResult =
+  | { success: true; character: CharacterInfo }
+  | { success: false; error: string };
+
 export async function generateScript(
   keyword: string,
   durationSeconds: number,
@@ -87,7 +101,8 @@ export async function generateScript(
 
 export async function generateSceneImage(
   prompt: string,
-  sceneDirection?: string
+  sceneDirection?: string,
+  characterImageUrl?: string
 ): Promise<GenerateImageResult> {
   const webhookUrl = process.env.N8N_GENERATE_IMAGE_WEBHOOK_URL;
   const secret = process.env.N8N_WEBHOOK_SECRET;
@@ -107,7 +122,7 @@ export async function generateSceneImage(
         "Content-Type": "application/json",
         "x-webhook-secret": secret,
       },
-      body: JSON.stringify({ prompt, sceneDirection }),
+      body: JSON.stringify({ prompt, sceneDirection, characterImageUrl }),
       signal: AbortSignal.timeout(60000),
     });
 
@@ -172,6 +187,136 @@ export async function uploadSceneImage(
   } = supabase.storage.from("scene-uploads").getPublicUrl(path);
 
   return { success: true, imageUrl: publicUrl };
+}
+
+/**
+ * 로그인한 사용자가 등록해둔 캐릭터(앞/옆/뒤 참조 이미지)를 조회한다.
+ * 아직 등록 안 했으면 character: null을 반환한다(에러 아님).
+ */
+export async function getCharacter(): Promise<GetCharacterResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { success: false, error: "로그인이 필요해요." };
+  }
+
+  const { data, error } = await supabase
+    .from("characters")
+    .select("front_image_url, side_image_url, back_image_url")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (error) {
+    return { success: false, error: "캐릭터 정보를 불러오지 못했어요." };
+  }
+
+  if (!data) {
+    return { success: true, character: null };
+  }
+
+  return {
+    success: true,
+    character: {
+      frontImageUrl: data.front_image_url,
+      sideImageUrl: data.side_image_url,
+      backImageUrl: data.back_image_url,
+    },
+  };
+}
+
+/**
+ * 캐릭터 이미지(앞/옆/뒤)를 업로드하고 사용자당 1개인 characters 행에
+ * upsert한다. 옆/뒤는 선택이라 새로 안 올리면 기존 값을 그대로 유지한다
+ * (앞모습만 새로 올려서 "교체"하는 경우를 지원하기 위함).
+ */
+export async function uploadCharacter(
+  formData: FormData
+): Promise<SaveCharacterResult> {
+  const front = formData.get("front");
+  const side = formData.get("side");
+  const back = formData.get("back");
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { success: false, error: "로그인이 필요해요." };
+  }
+
+  const { data: existing } = await supabase
+    .from("characters")
+    .select("front_image_url, side_image_url, back_image_url")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  const uploadOne = async (file: File, label: string) => {
+    const ext = file.name.split(".").pop() || "png";
+    const path = `${user.id}/${label}-${Date.now()}.${ext}`;
+    const { error } = await supabase.storage
+      .from("character-uploads")
+      .upload(path, file);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from("character-uploads").getPublicUrl(path);
+
+    return publicUrl;
+  };
+
+  try {
+    const frontImageUrl =
+      front instanceof File && front.size > 0
+        ? await uploadOne(front, "front")
+        : existing?.front_image_url;
+
+    if (!frontImageUrl) {
+      return { success: false, error: "정면 이미지는 필수예요." };
+    }
+
+    const sideImageUrl =
+      side instanceof File && side.size > 0
+        ? await uploadOne(side, "side")
+        : existing?.side_image_url ?? null;
+
+    const backImageUrl =
+      back instanceof File && back.size > 0
+        ? await uploadOne(back, "back")
+        : existing?.back_image_url ?? null;
+
+    const { error: upsertError } = await supabase.from("characters").upsert(
+      {
+        user_id: user.id,
+        front_image_url: frontImageUrl,
+        side_image_url: sideImageUrl,
+        back_image_url: backImageUrl,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id" }
+    );
+
+    if (upsertError) {
+      return { success: false, error: "캐릭터 저장에 실패했어요." };
+    }
+
+    return {
+      success: true,
+      character: { frontImageUrl, sideImageUrl, backImageUrl },
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "이미지 업로드에 실패했어요.",
+    };
+  }
 }
 
 /**
