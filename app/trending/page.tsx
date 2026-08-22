@@ -12,14 +12,18 @@ import {
   Sparkles,
   TrendingUp,
   Users,
+  Youtube,
+  BarChart3,
 } from "lucide-react";
 import {
   getTrendResults,
   searchTrendLive,
   analyzeBenchmark,
   getSurgeVideos,
+  analyzeChannel,
   type TrendResult,
   type SurgeVideo,
+  type ChannelAnalysis,
 } from "./actions";
 
 function formatViews(count: number | null): string {
@@ -169,6 +173,35 @@ export default function TrendingPage() {
   const [surgeBenchmarks, setSurgeBenchmarks] = useState<
     Record<string, BenchmarkState>
   >({});
+
+  const [showChannelAnalysis, setShowChannelAnalysis] = useState(false);
+  const [channelUrlInput, setChannelUrlInput] = useState("");
+  const [channelResult, setChannelResult] = useState<ChannelAnalysis | null>(
+    null
+  );
+  const [channelLoading, setChannelLoading] = useState(false);
+  const [channelError, setChannelError] = useState("");
+
+  const handleAnalyzeChannel = async () => {
+    if (!channelUrlInput.trim()) {
+      setChannelError("채널 URL 또는 @핸들을 입력해주세요.");
+      return;
+    }
+
+    setChannelLoading(true);
+    setChannelError("");
+    setChannelResult(null);
+
+    const result = await analyzeChannel(channelUrlInput.trim());
+    setChannelLoading(false);
+
+    if (!result.success) {
+      setChannelError(result.error);
+      return;
+    }
+
+    setChannelResult(result.data);
+  };
 
   const runSearch = async (query?: string) => {
     setLoading(true);
@@ -358,7 +391,126 @@ export default function TrendingPage() {
           지난주 급상승 TOP10
           {showSurge ? " 접기" : " 보기"}
         </button>
+
+        <button
+          type="button"
+          onClick={() => setShowChannelAnalysis((v) => !v)}
+          className="ml-3 flex items-center gap-2 rounded-xl border border-purple-200 bg-purple-50 px-4 py-2.5 text-sm font-bold text-purple-700 transition-colors duration-200 hover:bg-purple-100"
+        >
+          <BarChart3 className="h-4 w-4" />
+          내 채널 분석
+          {showChannelAnalysis ? " 접기" : " 보기"}
+        </button>
       </div>
+
+      {showChannelAnalysis && (
+        <div className="mt-6 rounded-2xl bg-slate-50 p-6">
+          <p className="text-sm text-slate-500">
+            내 유튜브 채널의 공개 데이터를 AI가 분석해서 조회수·매출을 높일
+            구체적인 팁을 알려드려요. 로그인 없이 채널 URL만 입력하면 돼요.
+          </p>
+
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+            <div className="flex flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3">
+              <Youtube className="h-4 w-4 flex-shrink-0 text-red-500" />
+              <input
+                type="text"
+                value={channelUrlInput}
+                onChange={(e) => setChannelUrlInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleAnalyzeChannel();
+                }}
+                placeholder="예: youtube.com/@채널명 또는 @핸들"
+                className="w-full border-none bg-transparent text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={handleAnalyzeChannel}
+              disabled={channelLoading}
+              className="flex flex-shrink-0 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-blue-500 px-5 py-3 text-sm font-bold text-white shadow-md shadow-purple-500/20 transition-all duration-200 hover:scale-[1.03] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {channelLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
+              분석하기
+            </button>
+          </div>
+
+          {channelError && (
+            <p className="mt-3 rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
+              {channelError}
+            </p>
+          )}
+
+          {channelResult && (
+            <div className="mt-6 rounded-2xl bg-white p-5 shadow-sm">
+              <div className="flex flex-wrap items-center gap-4">
+                {channelResult.channel.thumbnailUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={channelResult.channel.thumbnailUrl}
+                    alt={channelResult.channel.title}
+                    className="h-16 w-16 rounded-full object-cover"
+                  />
+                )}
+                <div>
+                  <p className="text-base font-bold text-slate-800">
+                    {channelResult.channel.title}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    구독자 {formatViews(channelResult.channel.subscriberCount)}{" "}
+                    · 총 조회수 {formatViews(channelResult.channel.viewCount)}{" "}
+                    · 영상 {formatViews(channelResult.channel.videoCount)}개
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {[
+                  {
+                    label: "최근 평균 조회수",
+                    value: formatViews(channelResult.metrics.avgViews),
+                  },
+                  {
+                    label: "평균 업로드 간격",
+                    value:
+                      channelResult.metrics.avgUploadIntervalDays != null
+                        ? `${channelResult.metrics.avgUploadIntervalDays}일`
+                        : "-",
+                  },
+                  {
+                    label: "평균 참여율",
+                    value: `${channelResult.metrics.avgEngagementRate}%`,
+                  },
+                  {
+                    label: "숏폼 비중",
+                    value: `${channelResult.metrics.shortsRatio}%`,
+                  },
+                ].map((stat) => (
+                  <div
+                    key={stat.label}
+                    className="rounded-xl bg-purple-50 px-3 py-3 text-center"
+                  >
+                    <p className="text-lg font-extrabold text-purple-700">
+                      {stat.value}
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-slate-500">
+                      {stat.label}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-5 rounded-xl bg-slate-50 p-4 text-sm leading-relaxed whitespace-pre-wrap text-slate-700">
+                {channelResult.analysis}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {showSurge && (
         <div className="mt-6 rounded-2xl bg-slate-50 p-6">
