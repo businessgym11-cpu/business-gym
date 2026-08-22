@@ -10,6 +10,8 @@ import {
   Rocket,
   Check,
   ArrowDown,
+  ArrowRight,
+  HelpCircle,
 } from "lucide-react";
 
 const problems = [
@@ -50,7 +52,7 @@ const steps = [
 
 const benefits = [
   "하루 3개 AI 릴스 자동 생성",
-  "사주/타로 전용 템플릿 무제한 제공",
+  "내 브랜드 캐릭터로 일관된 콘텐츠 무제한 제작",
   "트렌드 분석기 무제한 이용",
   "인스타그램 · 유튜브 쇼츠 자동 예약 발행",
   "전담 매니저 1:1 온보딩 지원",
@@ -102,6 +104,32 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* 1-1. 사업 없는 분들을 위한 옵션 안내 */}
+      <section className="border-y border-slate-100 bg-slate-50/70 py-8">
+        <div className="mx-auto flex max-w-4xl flex-col items-center justify-between gap-4 px-6 text-center sm:flex-row sm:text-left">
+          <div className="flex items-center gap-3">
+            <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm">
+              <HelpCircle className="h-5 w-5" />
+            </span>
+            <p className="text-sm text-slate-600">
+              <span className="font-bold text-slate-800">
+                아직 홍보할 사업이 없으신가요?
+              </span>{" "}
+              이미 만들어진 사주 운세 서비스로 바로 시작할 수도 있어요.
+            </p>
+          </div>
+          <a
+            href="https://todaysajupro.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition-colors duration-200 hover:border-purple-300 hover:text-purple-700"
+          >
+            오늘의사주 살펴보기
+            <ArrowRight className="h-4 w-4" />
+          </a>
+        </div>
+      </section>
+
       {/* 2. Problem & Solution Section */}
       <section className="bg-purple-50 py-24">
         <div className="mx-auto max-w-6xl px-6">
@@ -110,8 +138,8 @@ export default function HomePage() {
               이런 고민, 저희가 해결해 드립니다
             </h2>
             <p className="mt-4 text-slate-600">
-              사주 · 타로 · 정보성 비즈니스 원장님들이 매일 겪는 콘텐츠
-              제작의 어려움을 완전히 자동화합니다.
+              어떤 사업을 하시든, 나만의 브랜드로 콘텐츠를 만드는 어려움을
+              완전히 자동화합니다.
             </p>
           </div>
 
