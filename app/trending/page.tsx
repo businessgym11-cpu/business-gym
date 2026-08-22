@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Search,
@@ -156,7 +156,8 @@ export default function TrendingPage() {
   const [keyword, setKeyword] = useState("");
   const [results, setResults] = useState<TrendResult[]>([]);
   const [snapshotDate, setSnapshotDate] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
   const [error, setError] = useState("");
   const [searchedKeyword, setSearchedKeyword] = useState("");
   const [benchmarks, setBenchmarks] = useState<Record<string, BenchmarkState>>(
@@ -205,6 +206,7 @@ export default function TrendingPage() {
 
   const runSearch = async (query?: string) => {
     setLoading(true);
+    setHasSearched(true);
     setError("");
     setBenchmarks({});
 
@@ -236,11 +238,6 @@ export default function TrendingPage() {
     setResults(result.results);
     setSnapshotDate(result.snapshotDate);
   };
-
-  useEffect(() => {
-    runSearch();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const handleAnalyze = async (item: TrendResult) => {
     setBenchmarks((prev) => ({ ...prev, [item.id]: { status: "loading" } }));
@@ -381,25 +378,55 @@ export default function TrendingPage() {
         </button>
       </div>
 
-      <div className="mt-4">
+      <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <button
           type="button"
           onClick={handleToggleSurge}
-          className="flex items-center gap-2 rounded-xl border border-purple-200 bg-purple-50 px-4 py-2.5 text-sm font-bold text-purple-700 transition-colors duration-200 hover:bg-purple-100"
+          className={`flex items-center gap-3 rounded-2xl border px-5 py-4 text-left transition-colors duration-200 ${
+            showSurge
+              ? "border-purple-300 bg-purple-50"
+              : "border-slate-200 bg-white hover:border-purple-200 hover:bg-purple-50/50"
+          }`}
         >
-          <TrendingUp className="h-4 w-4" />
-          지난주 급상승 TOP10
-          {showSurge ? " 접기" : " 보기"}
+          <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-purple-600 to-blue-500 text-white">
+            <TrendingUp className="h-5 w-5" />
+          </span>
+          <span className="flex-1">
+            <span className="block text-sm font-bold text-slate-800">
+              지난주 급상승 TOP10
+            </span>
+            <span className="block text-xs text-slate-500">
+              장르 무관, 구독자 대비 조회수가 튄 영상
+            </span>
+          </span>
+          <span className="flex-shrink-0 text-xs font-semibold text-purple-600">
+            {showSurge ? "접기" : "보기"}
+          </span>
         </button>
 
         <button
           type="button"
           onClick={() => setShowChannelAnalysis((v) => !v)}
-          className="ml-3 flex items-center gap-2 rounded-xl border border-purple-200 bg-purple-50 px-4 py-2.5 text-sm font-bold text-purple-700 transition-colors duration-200 hover:bg-purple-100"
+          className={`flex items-center gap-3 rounded-2xl border px-5 py-4 text-left transition-colors duration-200 ${
+            showChannelAnalysis
+              ? "border-purple-300 bg-purple-50"
+              : "border-slate-200 bg-white hover:border-purple-200 hover:bg-purple-50/50"
+          }`}
         >
-          <BarChart3 className="h-4 w-4" />
-          내 채널 분석
-          {showChannelAnalysis ? " 접기" : " 보기"}
+          <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-purple-600 to-blue-500 text-white">
+            <BarChart3 className="h-5 w-5" />
+          </span>
+          <span className="flex-1">
+            <span className="block text-sm font-bold text-slate-800">
+              내 채널 분석
+            </span>
+            <span className="block text-xs text-slate-500">
+              내 유튜브 채널을 AI가 진단하고 팁을 줘요
+            </span>
+          </span>
+          <span className="flex-shrink-0 text-xs font-semibold text-purple-600">
+            {showChannelAnalysis ? "접기" : "보기"}
+          </span>
         </button>
       </div>
 
@@ -579,7 +606,7 @@ export default function TrendingPage() {
         </p>
       )}
 
-      {!loading && !error && results.length === 0 && (
+      {!loading && !error && hasSearched && results.length === 0 && (
         <p className="mt-12 rounded-xl bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
           {searchedKeyword
             ? `"${searchedKeyword}"에 대한 검색 결과가 없어요. 다른 키워드로 시도해보세요.`
@@ -587,18 +614,29 @@ export default function TrendingPage() {
         </p>
       )}
 
+      {!loading && !error && !hasSearched && (
+        <div className="mt-12 flex flex-col items-center gap-2 rounded-xl border border-dashed border-slate-200 px-4 py-14 text-center">
+          <Search className="h-6 w-6 text-slate-300" />
+          <p className="text-sm text-slate-500">
+            키워드를 검색하면 인기 영상을 찾아드려요.
+          </p>
+        </div>
+      )}
+
       {/* 분석 결과 그리드 */}
-      <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        {results.map((item) => (
-          <TrendCard
-            key={item.id}
-            item={item}
-            benchmark={benchmarks[item.id] ?? { status: "idle" }}
-            onAnalyze={() => handleAnalyze(item)}
-            onUseAnalysis={() => handleUseAnalysis(item)}
-          />
-        ))}
-      </div>
+      {results.length > 0 && (
+        <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {results.map((item) => (
+            <TrendCard
+              key={item.id}
+              item={item}
+              benchmark={benchmarks[item.id] ?? { status: "idle" }}
+              onAnalyze={() => handleAnalyze(item)}
+              onUseAnalysis={() => handleUseAnalysis(item)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
