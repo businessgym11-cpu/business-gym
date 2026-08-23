@@ -15,6 +15,7 @@ const navItems = [
   { label: "대시보드", href: "/dashboard" },
   { label: "트렌드 분석", href: "/trending" },
   { label: "AI 릴스 생성", href: "/create" },
+  { label: "AI 이미지 생성", href: "/images" },
 ];
 
 async function getCurrentUser(): Promise<User | null> {
