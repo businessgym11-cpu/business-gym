@@ -9,6 +9,7 @@ import {
   Film,
   Upload,
   X,
+  AlertTriangle,
 } from "lucide-react";
 import {
   generateSceneImage,
@@ -27,12 +28,22 @@ type GeneratedImage = {
 };
 
 const VIDEO_DURATIONS = [3, 5, 8, 10];
+const VIDEO_JOBS_STORAGE_KEY = "bg_video_jobs";
 
-type VideoJobState =
+type VideoJobRecord = {
+  jobId: string;
+  imageUrl: string;
+  prompt: string;
+  duration: number;
+  createdAt: number;
+  status: "pending" | "done" | "error";
+  videoUrl?: string;
+  error?: string;
+};
+
+type VideoSubmitState =
   | { status: "idle" }
   | { status: "submitting" }
-  | { status: "pending"; jobId: string }
-  | { status: "done"; jobId: string; videoUrl: string }
   | { status: "error"; error: string };
 
 export default function ImagesPage() {
@@ -49,11 +60,18 @@ export default function ImagesPage() {
   const [videoSourceUrl, setVideoSourceUrl] = useState<string | null>(null);
   const [videoPrompt, setVideoPrompt] = useState("");
   const [videoDuration, setVideoDuration] = useState(5);
-  const [videoJob, setVideoJob] = useState<VideoJobState>({ status: "idle" });
+  const [videoSubmitState, setVideoSubmitState] = useState<VideoSubmitState>({
+    status: "idle",
+  });
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [uploadingSource, setUploadingSource] = useState(false);
-  const [downloadingVideo, setDownloadingVideo] = useState(false);
+  const [downloadingVideoId, setDownloadingVideoId] = useState<string | null>(
+    null
+  );
   const sourceFileRef = useRef<HTMLInputElement>(null);
-  const pollTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+
+  const [videoJobs, setVideoJobs] = useState<VideoJobRecord[]>([]);
+  const jobsLoadedRef = useRef(false);
 
   useEffect(() => {
     getCharacter().then((result) => {
@@ -65,20 +83,67 @@ export default function ImagesPage() {
   }, []);
 
   useEffect(() => {
-    return () => {
-      if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current);
-    };
+    const saved = sessionStorage.getItem(VIDEO_JOBS_STORAGE_KEY);
+    if (saved) {
+      try {
+        setVideoJobs(JSON.parse(saved));
+      } catch {
+        // 저장된 값이 깨졌으면 무시하고 빈 목록으로 시작
+      }
+    }
+    jobsLoadedRef.current = true;
   }, []);
+
+  useEffect(() => {
+    if (!jobsLoadedRef.current) return;
+    sessionStorage.setItem(VIDEO_JOBS_STORAGE_KEY, JSON.stringify(videoJobs));
+  }, [videoJobs]);
+
+  useEffect(() => {
+    const pending = videoJobs.filter((j) => j.status === "pending");
+    if (pending.length === 0) return;
+
+    const timer = setTimeout(async () => {
+      for (const job of pending) {
+        const result = await checkImageToVideoStatus(job.jobId);
+        if (!result.success) continue;
+
+        if (result.status === "done") {
+          setVideoJobs((prev) =>
+            prev.map((j) =>
+              j.jobId === job.jobId
+                ? { ...j, status: "done", videoUrl: result.videoUrl ?? "" }
+                : j
+            )
+          );
+        } else if (result.status === "error") {
+          setVideoJobs((prev) =>
+            prev.map((j) =>
+              j.jobId === job.jobId
+                ? {
+                    ...j,
+                    status: "error",
+                    error: result.error ?? "영상 생성에 실패했어요.",
+                  }
+                : j
+            )
+          );
+        }
+      }
+    }, 8000);
+
+    return () => clearTimeout(timer);
+  }, [videoJobs]);
 
   const openVideoModal = (imageUrl: string) => {
     setVideoSourceUrl(imageUrl);
     setVideoPrompt("");
     setVideoDuration(5);
-    setVideoJob({ status: "idle" });
+    setVideoSubmitState({ status: "idle" });
+    setActiveJobId(null);
   };
 
   const closeVideoModal = () => {
-    if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current);
     setVideoSourceUrl(null);
   };
 
@@ -90,47 +155,24 @@ export default function ImagesPage() {
     setUploadingSource(false);
 
     if (!result.success) {
-      setVideoJob({ status: "error", error: result.error });
+      setVideoSubmitState({ status: "error", error: result.error });
       return;
     }
 
     openVideoModal(result.imageUrl);
   };
 
-  const pollVideoStatus = (jobId: string) => {
-    pollTimeoutRef.current = setTimeout(async () => {
-      const result = await checkImageToVideoStatus(jobId);
-
-      if (!result.success) {
-        setVideoJob({ status: "error", error: result.error });
-        return;
-      }
-
-      if (result.status === "done") {
-        setVideoJob({ status: "done", jobId, videoUrl: result.videoUrl ?? "" });
-        return;
-      }
-
-      if (result.status === "error") {
-        setVideoJob({
-          status: "error",
-          error: result.error ?? "영상 생성에 실패했어요.",
-        });
-        return;
-      }
-
-      pollVideoStatus(jobId);
-    }, 8000);
-  };
-
   const handleStartVideo = async () => {
     if (!videoSourceUrl) return;
     if (!videoPrompt.trim()) {
-      setVideoJob({ status: "error", error: "어떤 움직임을 넣을지 입력해주세요." });
+      setVideoSubmitState({
+        status: "error",
+        error: "어떤 움직임을 넣을지 입력해주세요.",
+      });
       return;
     }
 
-    setVideoJob({ status: "submitting" });
+    setVideoSubmitState({ status: "submitting" });
 
     const result = await startImageToVideoJob(
       videoSourceUrl,
@@ -139,23 +181,32 @@ export default function ImagesPage() {
     );
 
     if (!result.success) {
-      setVideoJob({ status: "error", error: result.error });
+      setVideoSubmitState({ status: "error", error: result.error });
       return;
     }
 
-    setVideoJob({ status: "pending", jobId: result.jobId });
-    pollVideoStatus(result.jobId);
+    const newJob: VideoJobRecord = {
+      jobId: result.jobId,
+      imageUrl: videoSourceUrl,
+      prompt: videoPrompt.trim(),
+      duration: videoDuration,
+      createdAt: Date.now(),
+      status: "pending",
+    };
+    setVideoJobs((prev) => [newJob, ...prev]);
+    setActiveJobId(result.jobId);
+    setVideoSubmitState({ status: "idle" });
   };
 
-  const handleDownloadVideo = async (videoUrl: string) => {
-    setDownloadingVideo(true);
+  const handleDownloadVideo = async (jobId: string, videoUrl: string) => {
+    setDownloadingVideoId(jobId);
     try {
       const res = await fetch(videoUrl);
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `business-gym-${crypto.randomUUID()}.mp4`;
+      a.download = `business-gym-${jobId}.mp4`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -163,7 +214,7 @@ export default function ImagesPage() {
     } catch {
       window.open(videoUrl, "_blank", "noopener,noreferrer");
     } finally {
-      setDownloadingVideo(false);
+      setDownloadingVideoId(null);
     }
   };
 
@@ -218,6 +269,10 @@ export default function ImagesPage() {
     }
   };
 
+  const activeJob = activeJobId
+    ? videoJobs.find((j) => j.jobId === activeJobId) ?? null
+    : null;
+
   return (
     <div className="mx-auto max-w-5xl px-6 py-10">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -257,6 +312,80 @@ export default function ImagesPage() {
           }}
         />
       </div>
+
+      {videoJobs.length > 0 && (
+        <div className="mt-6">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-sm font-bold text-slate-800">
+              내가 만든 영상
+            </h2>
+            <div className="flex items-center gap-1.5 text-xs font-medium text-amber-600">
+              <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
+              로그아웃하면 사라져요. 지금 다운로드해두세요.
+            </div>
+          </div>
+
+          <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+            {videoJobs.map((job) => (
+              <div
+                key={job.jobId}
+                className="flex flex-col overflow-hidden rounded-2xl bg-white shadow-sm"
+              >
+                <div className="relative aspect-[9/16] w-full overflow-hidden bg-slate-100">
+                  {job.status === "done" && job.videoUrl ? (
+                    <video
+                      src={job.videoUrl}
+                      controls
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={job.imageUrl}
+                      alt={job.prompt}
+                      className="h-full w-full object-cover"
+                    />
+                  )}
+                  {job.status === "pending" && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/40 text-center text-xs font-medium text-white">
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                      생성 중...
+                    </div>
+                  )}
+                </div>
+                <div className="px-3 pt-2">
+                  <p className="line-clamp-1 text-xs text-slate-500">
+                    {job.prompt}
+                  </p>
+                </div>
+                {job.status === "done" && job.videoUrl ? (
+                  <button
+                    type="button"
+                    onClick={() => handleDownloadVideo(job.jobId, job.videoUrl!)}
+                    disabled={downloadingVideoId === job.jobId}
+                    className="mx-3 mb-3 mt-2 flex items-center justify-center gap-1.5 rounded-lg bg-purple-50 py-2 text-xs font-semibold text-purple-700 transition-colors duration-200 hover:bg-purple-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {downloadingVideoId === job.jobId ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Download className="h-3.5 w-3.5" />
+                    )}
+                    다운로드
+                  </button>
+                ) : job.status === "error" ? (
+                  <p className="mx-3 mb-3 mt-2 line-clamp-2 rounded-lg bg-red-50 px-2 py-1.5 text-[11px] font-medium text-red-600">
+                    {job.error}
+                  </p>
+                ) : (
+                  <div className="mx-3 mb-3 mt-2 rounded-lg bg-slate-50 py-2 text-center text-xs font-medium text-slate-400">
+                    잠시만 기다려주세요
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="mt-8">
         <CharacterPanel
@@ -395,7 +524,7 @@ export default function ImagesPage() {
               </div>
 
               <div className="flex-1">
-                {videoJob.status === "idle" || videoJob.status === "error" ? (
+                {!activeJob && videoSubmitState.status !== "submitting" ? (
                   <>
                     <label className="text-xs font-bold text-slate-700">
                       어떤 움직임을 넣을까요?
@@ -430,34 +559,40 @@ export default function ImagesPage() {
                   </>
                 ) : null}
 
-                {videoJob.status === "submitting" && (
+                {videoSubmitState.status === "submitting" && (
                   <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-slate-500">
                     <Loader2 className="h-5 w-5 animate-spin text-purple-500" />
                     시작하는 중...
                   </div>
                 )}
 
-                {videoJob.status === "pending" && (
+                {activeJob?.status === "pending" && (
                   <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-slate-500">
                     <Loader2 className="h-5 w-5 animate-spin text-purple-500" />
                     영상 생성 중이에요. 몇 분 정도 걸려요...
+                    <p className="text-xs text-slate-400">
+                      창을 닫아도 계속 만들어져요. 완성되면 위쪽 &quot;내가
+                      만든 영상&quot;에서 볼 수 있어요.
+                    </p>
                   </div>
                 )}
 
-                {videoJob.status === "done" && (
+                {activeJob?.status === "done" && activeJob.videoUrl && (
                   <div className="flex flex-col gap-2">
                     <video
-                      src={videoJob.videoUrl}
+                      src={activeJob.videoUrl}
                       controls
                       className="w-full rounded-lg"
                     />
                     <button
                       type="button"
-                      onClick={() => handleDownloadVideo(videoJob.videoUrl)}
-                      disabled={downloadingVideo}
+                      onClick={() =>
+                        handleDownloadVideo(activeJob.jobId, activeJob.videoUrl!)
+                      }
+                      disabled={downloadingVideoId === activeJob.jobId}
                       className="flex items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-blue-500 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      {downloadingVideo ? (
+                      {downloadingVideoId === activeJob.jobId ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       ) : (
                         <Download className="h-3.5 w-3.5" />
@@ -469,22 +604,27 @@ export default function ImagesPage() {
               </div>
             </div>
 
-            {videoJob.status === "error" && (
+            {(videoSubmitState.status === "error" ||
+              activeJob?.status === "error") && (
               <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-600">
-                {videoJob.error}
+                {videoSubmitState.status === "error"
+                  ? videoSubmitState.error
+                  : activeJob?.error}
               </p>
             )}
 
-            {(videoJob.status === "idle" || videoJob.status === "error") && (
-              <button
-                type="button"
-                onClick={handleStartVideo}
-                className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-blue-500 py-3 text-sm font-bold text-white shadow-md shadow-purple-500/20 transition-all duration-200 hover:scale-[1.02]"
-              >
-                <Film className="h-4 w-4" />
-                영상 생성하기
-              </button>
-            )}
+            {!activeJob &&
+              (videoSubmitState.status === "idle" ||
+                videoSubmitState.status === "error") && (
+                <button
+                  type="button"
+                  onClick={handleStartVideo}
+                  className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-blue-500 py-3 text-sm font-bold text-white shadow-md shadow-purple-500/20 transition-all duration-200 hover:scale-[1.02]"
+                >
+                  <Film className="h-4 w-4" />
+                  영상 생성하기
+                </button>
+              )}
           </div>
         </div>
       )}

@@ -21,6 +21,7 @@ export default function ProfileMenu({ email }: { email: string }) {
   }, []);
 
   const handleLogout = async () => {
+    sessionStorage.removeItem("bg_video_jobs");
     const supabase = createClient();
     await supabase.auth.signOut();
     router.push("/");
