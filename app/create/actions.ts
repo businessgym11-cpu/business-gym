@@ -42,6 +42,14 @@ type SaveCharacterResult =
   | { success: true; character: CharacterInfo }
   | { success: false; error: string };
 
+type StartImageToVideoJobResult =
+  | { success: true; jobId: string }
+  | { success: false; error: string };
+
+type CheckImageToVideoStatusResult =
+  | { success: true; status: "pending" | "done" | "error"; videoUrl?: string; error?: string }
+  | { success: false; error: string };
+
 export async function generateScript(
   keyword: string,
   durationSeconds: number,
@@ -566,6 +574,98 @@ export async function checkRenderStatus(
 
   if (error || !data) {
     return { success: false, error: "렌더링 작업을 찾을 수 없어요." };
+  }
+
+  return {
+    success: true,
+    status: data.status as "pending" | "done" | "error",
+    videoUrl: data.video_url ?? undefined,
+    error: data.error_message ?? undefined,
+  };
+}
+
+/**
+ * 이미지 1장 + 모션 프롬프트로 짧은 영상 클립을 만든다. n8n
+ * "Business Gym - Image To Video" 워크플로우는 image_to_video_jobs에
+ * pending 행을 만들고 jobId를 즉시 응답한 뒤, 백그라운드에서 Fal.ai
+ * LTX-Video(image-to-video)를 호출해 완료 시 해당 행을 done/error로
+ * 업데이트한다 — startRenderJob과 동일한 비동기/폴링 패턴.
+ */
+export async function startImageToVideoJob(
+  imageUrl: string,
+  prompt: string,
+  durationSeconds: number
+): Promise<StartImageToVideoJobResult> {
+  const webhookUrl = process.env.N8N_IMAGE_TO_VIDEO_WEBHOOK_URL;
+  const secret = process.env.N8N_WEBHOOK_SECRET;
+
+  if (!webhookUrl || !secret) {
+    return {
+      success: false,
+      error:
+        "이미지→영상 서비스가 아직 연결되지 않았어요. n8n 웹훅 설정을 확인해주세요.",
+    };
+  }
+
+  if (!imageUrl) {
+    return { success: false, error: "이미지가 필요해요." };
+  }
+
+  try {
+    const res = await fetch(webhookUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-webhook-secret": secret,
+      },
+      body: JSON.stringify({ imageUrl, prompt, duration: durationSeconds }),
+      signal: AbortSignal.timeout(20000),
+    });
+
+    if (!res.ok) {
+      return {
+        success: false,
+        error: `영상 생성 시작에 실패했어요. (status ${res.status})`,
+      };
+    }
+
+    const data = await res.json();
+    const jobId = typeof data.jobId === "string" ? data.jobId : "";
+
+    if (!jobId) {
+      return {
+        success: false,
+        error: "AI가 빈 응답을 반환했어요. 다시 시도해주세요.",
+      };
+    }
+
+    return { success: true, jobId };
+  } catch {
+    return {
+      success: false,
+      error:
+        "이미지→영상 서비스에 연결할 수 없어요. n8n 워크플로우가 켜져 있는지 확인해주세요.",
+    };
+  }
+}
+
+/**
+ * image_to_video_jobs 행을 직접 조회한다. checkRenderStatus와 동일하게
+ * 익명 키 + public-read RLS로 폴링한다.
+ */
+export async function checkImageToVideoStatus(
+  jobId: string
+): Promise<CheckImageToVideoStatusResult> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("image_to_video_jobs")
+    .select("status, video_url, error_message")
+    .eq("id", jobId)
+    .single();
+
+  if (error || !data) {
+    return { success: false, error: "영상 생성 작업을 찾을 수 없어요." };
   }
 
   return {
