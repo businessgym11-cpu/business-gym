@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Plus, Sparkles } from "lucide-react";
+import { BookOpen, Plus, Sparkles } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import ProfileMenu from "./ProfileMenu";
@@ -69,6 +69,15 @@ function Header({ user }: { user: User | null }) {
               >
                 <Plus className="h-4 w-4" />
                 새 작업 만들기
+              </Link>
+
+              <Link
+                href="/guide"
+                title="이용가이드"
+                className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition-colors duration-200 hover:bg-slate-100 hover:text-slate-900"
+              >
+                <BookOpen className="h-4 w-4" />
+                <span className="hidden sm:inline">이용가이드</span>
               </Link>
 
               <ProfileMenu email={user.email ?? ""} />

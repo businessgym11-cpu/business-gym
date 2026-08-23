@@ -561,7 +561,7 @@ export default function TrendingPage() {
 
           {!surgeLoading && !surgeError && surgeResults.length === 0 && (
             <p className="mt-6 rounded-xl bg-white px-4 py-6 text-center text-sm text-slate-500">
-              아직 급상승 데이터가 없어요. 매일 아침 자동으로 새로 업데이트돼요.
+              아직 급상승 데이터가 없어요.
             </p>
           )}
 
