@@ -193,6 +193,64 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* 2-1. 캐릭터 일관성 증거 */}
+      <section className="bg-white py-24">
+        <div className="mx-auto max-w-6xl px-6">
+          <div className="mx-auto mb-14 max-w-2xl text-center">
+            <h2 className="text-3xl font-extrabold text-slate-900 sm:text-4xl">
+              참조 이미지 한 장이면 끝
+            </h2>
+            <p className="mt-4 text-slate-600">
+              캐릭터 사진 한 장만 등록하면, 어떤 장면을 요청하든 같은
+              얼굴·같은 의상으로 만들어드려요.
+            </p>
+          </div>
+
+          <div className="flex flex-col items-center gap-6 md:flex-row md:items-stretch md:justify-center">
+            <div className="flex flex-col items-center">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/landing/character-reference.jpg"
+                alt="등록한 캐릭터 참조 이미지"
+                className="aspect-[3/5] w-40 rounded-2xl object-cover shadow-lg sm:w-48"
+              />
+              <span className="mt-3 rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-500">
+                등록한 참조 이미지
+              </span>
+            </div>
+
+            <div className="flex items-center justify-center py-2 md:py-0">
+              <ArrowRight className="h-6 w-6 flex-shrink-0 rotate-90 text-purple-300 md:rotate-0" />
+            </div>
+
+            <div className="grid grid-cols-3 gap-3 sm:gap-4">
+              {[
+                { src: "/landing/character-scene-1.jpg", label: "서재 씬" },
+                { src: "/landing/character-scene-2.jpg", label: "야외 씬" },
+                { src: "/landing/character-scene-3.jpg", label: "액션 씬" },
+              ].map((scene) => (
+                <div key={scene.src} className="flex flex-col items-center">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={scene.src}
+                    alt={`AI가 생성한 ${scene.label}, 같은 캐릭터`}
+                    className="aspect-[3/5] w-24 rounded-2xl object-cover shadow-lg ring-2 ring-purple-200 sm:w-32"
+                  />
+                  <span className="mt-3 text-xs font-medium text-slate-500">
+                    {scene.label}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <p className="mx-auto mt-10 max-w-lg text-center text-sm text-slate-400">
+            실제로 Business Gym에서 생성된 이미지예요. 매번 다른 캐릭터가
+            나오던 문제를 캐릭터 등록 하나로 해결했어요.
+          </p>
+        </div>
+      </section>
+
       {/* 3. How it Works */}
       <section className="bg-white py-24">
         <div className="mx-auto max-w-6xl px-6">
