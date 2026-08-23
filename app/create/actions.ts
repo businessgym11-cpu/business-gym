@@ -1,5 +1,6 @@
 "use server";
 
+import sharp from "sharp";
 import { createClient } from "@/lib/supabase/server";
 
 type GenerateScriptResult =
@@ -316,6 +317,163 @@ export async function uploadCharacter(
       success: false,
       error: e instanceof Error ? e.message : "이미지 업로드에 실패했어요.",
     };
+  }
+}
+
+/**
+ * 앞/옆/뒤가 한 장에 나란히 배치된 캐릭터 레퍼런스 시트 하나를 업로드하면
+ * n8n "Business Gym - Detect Character Panels" 워크플로우(Gemini Vision)가
+ * 뷰 개수(1~3)를 인식하고, 그 개수만큼 동일 너비로 잘라 각각 앞/옆/뒤로
+ * 저장한다. 인식에 실패하면 1장짜리 이미지로 간주하고 그대로 진행한다.
+ */
+export async function uploadCharacterSheet(
+  formData: FormData
+): Promise<SaveCharacterResult> {
+  const sheet = formData.get("sheet");
+
+  if (!(sheet instanceof File) || sheet.size === 0) {
+    return { success: false, error: "캐릭터 시트 이미지를 선택해주세요." };
+  }
+
+  const webhookUrl = process.env.N8N_DETECT_CHARACTER_PANELS_WEBHOOK_URL;
+  const secret = process.env.N8N_WEBHOOK_SECRET;
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { success: false, error: "로그인이 필요해요." };
+  }
+
+  const buffer = Buffer.from(await sheet.arrayBuffer());
+
+  const image = sharp(buffer);
+  const metadata = await image.metadata();
+  const width = metadata.width ?? 0;
+  const height = metadata.height ?? 0;
+
+  if (!width || !height) {
+    return {
+      success: false,
+      error: "이미지를 읽지 못했어요. 다른 파일로 시도해주세요.",
+    };
+  }
+
+  // 1. 원본 시트를 임시 업로드해서 n8n(Gemini Vision)이 URL로 볼 수 있게 함
+  const ext = sheet.name.split(".").pop() || "png";
+  const tempPath = `${user.id}/sheet-${Date.now()}.${ext}`;
+  const { error: tempUploadError } = await supabase.storage
+    .from("character-uploads")
+    .upload(tempPath, buffer, { contentType: sheet.type || undefined });
+
+  if (tempUploadError) {
+    return { success: false, error: tempUploadError.message };
+  }
+
+  const {
+    data: { publicUrl: tempUrl },
+  } = supabase.storage.from("character-uploads").getPublicUrl(tempPath);
+
+  // 2. 뷰 개수 인식 (실패하면 1장으로 간주)
+  let panelCount = 1;
+  if (webhookUrl && secret) {
+    try {
+      const res = await fetch(webhookUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-webhook-secret": secret,
+        },
+        body: JSON.stringify({ imageUrl: tempUrl }),
+        signal: AbortSignal.timeout(30000),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (
+          typeof data.panelCount === "number" &&
+          data.panelCount >= 1 &&
+          data.panelCount <= 3
+        ) {
+          panelCount = data.panelCount;
+        }
+      }
+    } catch {
+      // 인식 서비스 연결 실패 — 1장짜리 이미지로 간주하고 계속 진행
+    }
+  }
+
+  // 3. panelCount 등분으로 잘라서 각각 업로드
+  const panelWidth = Math.floor(width / panelCount);
+  const labels = ["front", "side", "back"] as const;
+
+  const uploadPanel = async (left: number, panelW: number, label: string) => {
+    const cropped = await sharp(buffer)
+      .extract({ left, top: 0, width: panelW, height })
+      .jpeg({ quality: 90 })
+      .toBuffer();
+
+    const path = `${user.id}/${label}-${Date.now()}.jpg`;
+    const { error } = await supabase.storage
+      .from("character-uploads")
+      .upload(path, cropped, { contentType: "image/jpeg" });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from("character-uploads").getPublicUrl(path);
+
+    return publicUrl;
+  };
+
+  try {
+    const urls: (string | null)[] = [null, null, null];
+    for (let i = 0; i < panelCount; i++) {
+      const left = i * panelWidth;
+      const w = i === panelCount - 1 ? width - left : panelWidth;
+      urls[i] = await uploadPanel(left, w, labels[i]);
+    }
+
+    const frontImageUrl = urls[0];
+    if (!frontImageUrl) {
+      return { success: false, error: "정면 이미지를 추출하지 못했어요." };
+    }
+
+    const { error: upsertError } = await supabase.from("characters").upsert(
+      {
+        user_id: user.id,
+        front_image_url: frontImageUrl,
+        side_image_url: urls[1],
+        back_image_url: urls[2],
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id" }
+    );
+
+    if (upsertError) {
+      return { success: false, error: "캐릭터 저장에 실패했어요." };
+    }
+
+    return {
+      success: true,
+      character: {
+        frontImageUrl,
+        sideImageUrl: urls[1],
+        backImageUrl: urls[2],
+      },
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "이미지 처리에 실패했어요.",
+    };
+  } finally {
+    await supabase.storage.from("character-uploads").remove([tempPath]);
   }
 }
 
