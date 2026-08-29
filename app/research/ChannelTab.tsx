@@ -37,6 +37,27 @@ import {
   type ShortsFilter,
   type ViewMode,
 } from "./shared";
+import VideoDetailModal, { type VideoDetailInput } from "./VideoDetailModal";
+
+function toDetailInput(
+  v: ResearchedVideo,
+  channel: ResearchedChannel
+): VideoDetailInput {
+  return {
+    id: v.youtubeVideoId,
+    title: v.title,
+    description: v.description,
+    thumbnailUrl: v.thumbnailUrl,
+    viewCount: v.viewCount,
+    likeCount: v.likeCount,
+    publishedAt: v.publishedAt,
+    videoUrl: `https://www.youtube.com/watch?v=${v.youtubeVideoId}`,
+    channelId: channel.youtubeChannelId,
+    channelTitle: channel.title,
+    contributionTier: v.contributionTier,
+    performanceTier: v.performanceTier,
+  };
+}
 
 export default function ChannelTab({
   autoRegisterInput,
@@ -48,6 +69,7 @@ export default function ChannelTab({
     null
   );
   const [videos, setVideos] = useState<ResearchedVideo[]>([]);
+  const [detailVideo, setDetailVideo] = useState<ResearchedVideo | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("table");
 
   const [channelInput, setChannelInput] = useState("");
@@ -574,7 +596,11 @@ export default function ChannelTab({
                 {filteredVideos.map((v) => (
                   <tr key={v.id} className="border-b border-slate-50 last:border-0">
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setDetailVideo(v)}
+                        className="flex items-center gap-3 text-left"
+                      >
                         {v.thumbnailUrl && (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
@@ -591,7 +617,7 @@ export default function ChannelTab({
                             </span>
                           )}
                         </span>
-                      </div>
+                      </button>
                     </td>
                     <td className="px-4 py-3 text-right font-semibold text-slate-800">
                       {formatViews(v.viewCount)}
@@ -650,25 +676,33 @@ export default function ChannelTab({
                   key={v.id}
                   className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
                 >
-                  <div className="relative aspect-video w-full overflow-hidden bg-slate-100">
-                    {v.thumbnailUrl && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={v.thumbnailUrl}
-                        alt={v.title}
-                        className="h-full w-full object-cover"
-                      />
-                    )}
-                    {v.isShorts && (
-                      <span className="absolute left-2 top-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-bold text-white">
-                        Shorts
-                      </span>
-                    )}
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setDetailVideo(v)}
+                    className="text-left"
+                  >
+                    <div className="relative aspect-video w-full overflow-hidden bg-slate-100">
+                      {v.thumbnailUrl && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={v.thumbnailUrl}
+                          alt={v.title}
+                          className="h-full w-full object-cover"
+                        />
+                      )}
+                      {v.isShorts && (
+                        <span className="absolute left-2 top-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                          Shorts
+                        </span>
+                      )}
+                    </div>
+                  </button>
                   <div className="flex flex-1 flex-col gap-1.5 p-3">
-                    <p className="line-clamp-2 text-sm font-semibold text-slate-800">
-                      {v.title}
-                    </p>
+                    <button type="button" onClick={() => setDetailVideo(v)} className="text-left">
+                      <p className="line-clamp-2 text-sm font-semibold text-slate-800">
+                        {v.title}
+                      </p>
+                    </button>
                     <div className="flex items-center gap-1.5">
                       <TierChip tier={v.contributionTier} />
                       <TierChip tier={v.performanceTier} />
@@ -714,6 +748,18 @@ export default function ChannelTab({
             아직 등록된 채널이 없어요. 위에 채널 URL이나 핸들을 입력해보세요.
           </p>
         </div>
+      )}
+
+      {detailVideo && activeChannel && (
+        <VideoDetailModal
+          video={toDetailInput(detailVideo, activeChannel)}
+          isSaved={savedVideoIds.has(detailVideo.youtubeVideoId)}
+          saving={savingId === detailVideo.id}
+          onToggleSave={() => toggleSave(detailVideo, activeChannel)}
+          onClose={() => setDetailVideo(null)}
+          preloadedChannel={activeChannel}
+          preloadedChannelVideos={videos}
+        />
       )}
     </div>
   );

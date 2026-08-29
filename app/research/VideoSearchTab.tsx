@@ -24,6 +24,24 @@ import {
   type ShortsFilter,
   type ViewMode,
 } from "./shared";
+import VideoDetailModal, { type VideoDetailInput } from "./VideoDetailModal";
+
+function toDetailInput(v: SearchedVideo): VideoDetailInput {
+  return {
+    id: v.id,
+    title: v.title,
+    description: v.description,
+    thumbnailUrl: v.thumbnailUrl,
+    viewCount: v.viewCount,
+    likeCount: v.likeCount,
+    publishedAt: v.publishedAt,
+    videoUrl: v.videoUrl,
+    channelId: v.channelId,
+    channelTitle: v.channelTitle,
+    contributionTier: v.contributionTier,
+    performanceTier: v.performanceTier,
+  };
+}
 
 export default function VideoSearchTab() {
   const [keyword, setKeyword] = useState("");
@@ -31,6 +49,7 @@ export default function VideoSearchTab() {
   const [loading, setLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("table");
+  const [detailVideo, setDetailVideo] = useState<SearchedVideo | null>(null);
   const [error, setError] = useState("");
 
   const [savedVideoIds, setSavedVideoIds] = useState<Set<string>>(new Set());
@@ -444,11 +463,10 @@ export default function VideoSearchTab() {
               {filteredResults.map((v) => (
                 <tr key={v.id} className="border-b border-slate-50 last:border-0">
                   <td className="px-4 py-3">
-                    <a
-                      href={v.videoUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-3"
+                    <button
+                      type="button"
+                      onClick={() => setDetailVideo(v)}
+                      className="flex items-center gap-3 text-left"
                     >
                       {v.thumbnailUrl && (
                         // eslint-disable-next-line @next/next/no-img-element
@@ -476,7 +494,7 @@ export default function VideoSearchTab() {
                           {v.channelTitle}
                         </span>
                       </span>
-                    </a>
+                    </button>
                   </td>
                   <td className="px-4 py-3 text-right font-semibold text-slate-800">
                     {formatViews(v.viewCount)}
@@ -534,7 +552,7 @@ export default function VideoSearchTab() {
               key={v.id}
               className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
             >
-              <a href={v.videoUrl} target="_blank" rel="noopener noreferrer">
+              <button type="button" onClick={() => setDetailVideo(v)} className="text-left">
                 <div className="relative aspect-video w-full overflow-hidden bg-slate-100">
                   {v.thumbnailUrl && (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -555,13 +573,13 @@ export default function VideoSearchTab() {
                     </span>
                   )}
                 </div>
-              </a>
+              </button>
               <div className="flex flex-1 flex-col gap-1.5 p-3">
-                <a href={v.videoUrl} target="_blank" rel="noopener noreferrer">
+                <button type="button" onClick={() => setDetailVideo(v)} className="text-left">
                   <p className="line-clamp-2 text-sm font-semibold text-slate-800 hover:text-purple-700">
                     {v.title}
                   </p>
-                </a>
+                </button>
                 <p className="text-xs text-slate-400">{v.channelTitle}</p>
                 <div className="flex items-center gap-1.5">
                   <TierChip tier={v.contributionTier} />
@@ -595,6 +613,16 @@ export default function VideoSearchTab() {
             </div>
           ))}
         </div>
+      )}
+
+      {detailVideo && (
+        <VideoDetailModal
+          video={toDetailInput(detailVideo)}
+          isSaved={savedVideoIds.has(detailVideo.id)}
+          saving={savingId === detailVideo.id}
+          onToggleSave={() => toggleSave(detailVideo)}
+          onClose={() => setDetailVideo(null)}
+        />
       )}
     </div>
   );

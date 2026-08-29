@@ -21,6 +21,7 @@ export type ResearchedVideo = {
   id: string;
   youtubeVideoId: string;
   title: string;
+  description: string | null;
   thumbnailUrl: string | null;
   durationSeconds: number | null;
   isShorts: boolean;
@@ -77,6 +78,7 @@ function mapVideoRow(row: {
   id: string;
   youtube_video_id: string;
   title: string;
+  description: string | null;
   thumbnail_url: string | null;
   duration_seconds: number | null;
   is_shorts: boolean;
@@ -90,6 +92,7 @@ function mapVideoRow(row: {
     id: row.id,
     youtubeVideoId: row.youtube_video_id,
     title: row.title,
+    description: row.description,
     thumbnailUrl: row.thumbnail_url,
     durationSeconds: row.duration_seconds,
     isShorts: row.is_shorts,
@@ -178,7 +181,7 @@ export async function registerAndFetchChannel(
   const { data: videoRows, error: videosError } = await supabase
     .from("researched_channel_videos")
     .select(
-      "id, youtube_video_id, title, thumbnail_url, duration_seconds, is_shorts, view_count, like_count, published_at, contribution_tier, performance_tier"
+      "id, youtube_video_id, title, description, thumbnail_url, duration_seconds, is_shorts, view_count, like_count, published_at, contribution_tier, performance_tier"
     )
     .eq("channel_row_id", channelRow.id)
     .order("view_count", { ascending: false });
@@ -234,7 +237,7 @@ export async function getChannelVideos(
   const { data, error } = await supabase
     .from("researched_channel_videos")
     .select(
-      "id, youtube_video_id, title, thumbnail_url, duration_seconds, is_shorts, view_count, like_count, published_at, contribution_tier, performance_tier"
+      "id, youtube_video_id, title, description, thumbnail_url, duration_seconds, is_shorts, view_count, like_count, published_at, contribution_tier, performance_tier"
     )
     .eq("channel_row_id", channelRowId)
     .order("view_count", { ascending: false });
