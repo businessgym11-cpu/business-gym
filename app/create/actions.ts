@@ -54,6 +54,7 @@ export async function generateScript(
   keyword: string,
   durationSeconds: number,
   sajuMode: boolean,
+  scriptFormat: "short" | "long",
   benchmarkAnalysis?: string
 ): Promise<GenerateScriptResult> {
   const webhookUrl = process.env.N8N_GENERATE_SCRIPT_WEBHOOK_URL;
@@ -78,6 +79,7 @@ export async function generateScript(
         keyword,
         duration: durationSeconds,
         sajuMode,
+        scriptFormat,
         benchmarkAnalysis,
       }),
       signal: AbortSignal.timeout(30000),

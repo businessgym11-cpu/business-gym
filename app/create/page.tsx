@@ -19,6 +19,7 @@ import {
   X,
   AlertTriangle,
   UserRound,
+  Copy,
 } from "lucide-react";
 import {
   generateScript,
@@ -315,8 +316,10 @@ function StepOneScript({
   const [benchmarkContext] = useState(initialBenchmarkContext ?? "");
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [subFormatId, setSubFormatId] = useState<string | null>(null);
+  const [scriptFormat, setScriptFormat] = useState<"short" | "long">("short");
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
+  const [copied, setCopied] = useState(false);
 
   const selectedCategory = SERIES_CATEGORIES.find((c) => c.id === categoryId);
   const selectedSubFormat = selectedCategory?.subFormats?.find(
@@ -346,6 +349,7 @@ function StepOneScript({
       keyword.trim(),
       duration,
       selectedCategory?.sajuMode ?? false,
+      scriptFormat,
       combinedContext || undefined
     );
 
@@ -451,25 +455,62 @@ function StepOneScript({
 
       <div className="mt-4 flex items-center gap-2">
         <span className="text-sm font-semibold text-slate-700">
-          영상 분량
+          대본 형식
         </span>
         <div className="flex rounded-lg border border-slate-200 p-1">
-          {DURATION_OPTIONS.map((d) => (
-            <button
-              key={d}
-              type="button"
-              onClick={() => setDuration(d)}
-              className={`rounded-md px-3 py-1.5 text-sm font-semibold transition-colors duration-200 ${
-                duration === d
-                  ? "bg-gradient-to-r from-purple-600 to-blue-500 text-white"
-                  : "text-slate-500 hover:bg-slate-100"
-              }`}
-            >
-              {d}초
-            </button>
-          ))}
+          <button
+            type="button"
+            onClick={() => setScriptFormat("short")}
+            className={`rounded-md px-3 py-1.5 text-sm font-semibold transition-colors duration-200 ${
+              scriptFormat === "short"
+                ? "bg-gradient-to-r from-purple-600 to-blue-500 text-white"
+                : "text-slate-500 hover:bg-slate-100"
+            }`}
+          >
+            숏폼 대본
+          </button>
+          <button
+            type="button"
+            onClick={() => setScriptFormat("long")}
+            className={`rounded-md px-3 py-1.5 text-sm font-semibold transition-colors duration-200 ${
+              scriptFormat === "long"
+                ? "bg-gradient-to-r from-purple-600 to-blue-500 text-white"
+                : "text-slate-500 hover:bg-slate-100"
+            }`}
+          >
+            롱폼 대본
+          </button>
         </div>
+        {scriptFormat === "long" && (
+          <span className="text-xs text-slate-400">
+            롱폼 대본은 AI 릴스 제작으로 이어지지 않아요.
+          </span>
+        )}
       </div>
+
+      {scriptFormat === "short" && (
+        <div className="mt-4 flex items-center gap-2">
+          <span className="text-sm font-semibold text-slate-700">
+            영상 분량
+          </span>
+          <div className="flex rounded-lg border border-slate-200 p-1">
+            {DURATION_OPTIONS.map((d) => (
+              <button
+                key={d}
+                type="button"
+                onClick={() => setDuration(d)}
+                className={`rounded-md px-3 py-1.5 text-sm font-semibold transition-colors duration-200 ${
+                  duration === d
+                    ? "bg-gradient-to-r from-purple-600 to-blue-500 text-white"
+                    : "text-slate-500 hover:bg-slate-100"
+                }`}
+              >
+                {d}초
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="mt-4 flex flex-col gap-3 sm:flex-row">
         <input
@@ -508,17 +549,39 @@ function StepOneScript({
         />
       </div>
 
-      <div className="mt-8 flex justify-end">
-        <button
-          type="button"
-          onClick={onNext}
-          disabled={!script.trim()}
-          className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-blue-500 px-6 py-3.5 font-bold text-white shadow-lg shadow-purple-500/30 transition-all duration-200 hover:scale-105 hover:shadow-xl active:scale-100 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <Sparkles className="h-5 w-5" />
-          다음: 스토리보드 확정하기
-        </button>
-      </div>
+      {scriptFormat === "long" ? (
+        <div className="mt-8 flex items-center justify-end gap-3">
+          <p className="text-xs text-slate-400">
+            롱폼 대본은 여기서 마무리돼요. 위 대본을 복사해서 직접 활용해주세요.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              if (!script.trim()) return;
+              navigator.clipboard.writeText(script);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 2000);
+            }}
+            disabled={!script.trim()}
+            className="flex flex-shrink-0 items-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-blue-500 px-6 py-3.5 font-bold text-white shadow-lg shadow-purple-500/30 transition-all duration-200 hover:scale-105 hover:shadow-xl active:scale-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Copy className="h-5 w-5" />
+            {copied ? "복사됐어요!" : "대본 복사하기"}
+          </button>
+        </div>
+      ) : (
+        <div className="mt-8 flex justify-end">
+          <button
+            type="button"
+            onClick={onNext}
+            disabled={!script.trim()}
+            className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-blue-500 px-6 py-3.5 font-bold text-white shadow-lg shadow-purple-500/30 transition-all duration-200 hover:scale-105 hover:shadow-xl active:scale-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Sparkles className="h-5 w-5" />
+            다음: 스토리보드 확정하기
+          </button>
+        </div>
+      )}
     </div>
   );
 }
