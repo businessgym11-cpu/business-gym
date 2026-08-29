@@ -370,13 +370,13 @@ export default function VideoSearchTab() {
 
           <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2">
             <TierFilterGroup
-              label="기여도"
+              label="주목도"
               tiers={CONTRIBUTION_TIERS}
               selected={contributionSelected}
               onToggle={toggleContribution}
             />
             <TierFilterGroup
-              label="성과도"
+              label="효율도"
               tiers={PERFORMANCE_TIERS}
               selected={performanceSelected}
               onToggle={togglePerformance}
@@ -427,8 +427,8 @@ export default function VideoSearchTab() {
                 <th className="px-4 py-3 font-semibold">영상</th>
                 <th className="px-4 py-3 text-right font-semibold">조회수</th>
                 <th className="px-4 py-3 text-right font-semibold">구독자</th>
-                <th className="px-4 py-3 font-semibold">기여도</th>
-                <th className="px-4 py-3 font-semibold">성과도</th>
+                <th className="px-4 py-3 font-semibold">주목도</th>
+                <th className="px-4 py-3 font-semibold">효율도</th>
                 <th className="px-4 py-3 font-semibold">게시일</th>
                 <th className="px-4 py-3 font-semibold"></th>
               </tr>

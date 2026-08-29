@@ -424,7 +424,7 @@ export default function ChannelTab({
               </div>
             </div>
             <p className="mt-4 text-xs text-slate-400">
-              최근 영상 최대 50개 기준으로 집계돼요. 기여도·성과도는 정확한 값이
+              최근 영상 최대 50개 기준으로 집계돼요. 주목도·효율도는 정확한 값이
               아니라 이 채널 안에서의 상대적인 근사 등급이에요.
             </p>
           </div>
@@ -535,13 +535,13 @@ export default function ChannelTab({
 
               <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2">
                 <TierFilterGroup
-                  label="기여도"
+                  label="주목도"
                   tiers={CONTRIBUTION_TIERS}
                   selected={contributionSelected}
                   onToggle={toggleContribution}
                 />
                 <TierFilterGroup
-                  label="성과도"
+                  label="효율도"
                   tiers={PERFORMANCE_TIERS}
                   selected={performanceSelected}
                   onToggle={togglePerformance}
@@ -557,8 +557,8 @@ export default function ChannelTab({
                 <tr className="border-b border-slate-100 text-left text-xs text-slate-400">
                   <th className="px-4 py-3 font-semibold">영상</th>
                   <th className="px-4 py-3 text-right font-semibold">조회수</th>
-                  <th className="px-4 py-3 font-semibold">기여도</th>
-                  <th className="px-4 py-3 font-semibold">성과도</th>
+                  <th className="px-4 py-3 font-semibold">주목도</th>
+                  <th className="px-4 py-3 font-semibold">효율도</th>
                   <th className="px-4 py-3 font-semibold">게시일</th>
                   <th className="px-4 py-3 font-semibold"></th>
                 </tr>

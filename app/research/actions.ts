@@ -549,8 +549,8 @@ type SearchChannelsResult =
   | { success: false; error: string };
 
 /**
- * 키워드로 유튜브 전체를 검색해 영상별 조회수/좋아요/구독자수와 기여도·
- * 성과도 근사 등급을 받아온다. n8n "Business Gym - Video Search" 워크플로우
+ * 키워드로 유튜브 전체를 검색해 영상별 조회수/좋아요/구독자수와 주목도·
+ * 효율도(구 기여도/성과도) 근사 등급을 받아온다. n8n "Business Gym - Video Search" 워크플로우
  * (search.list + videos.list + channels.list 조합) 호출.
  */
 export async function searchVideos(keyword: string): Promise<SearchVideosResult> {
