@@ -105,43 +105,163 @@ function StepProgress({ step }: { step: number }) {
 
 const DURATION_OPTIONS = [10, 20, 30];
 
-const SERIES_FORMATS = [
+type SeriesSubFormat = {
+  id: string;
+  label: string;
+  description: string;
+  promptGuide: string;
+};
+
+type SeriesCategory = {
+  id: string;
+  label: string;
+  description: string;
+  sajuMode: boolean;
+  promptGuide?: string;
+  subFormats?: SeriesSubFormat[];
+};
+
+const SERIES_CATEGORIES: SeriesCategory[] = [
   {
-    id: "daily",
-    label: "오늘의 운세",
-    description: "매일 챙겨보는 캐릭터의 짧은 오늘의 운세 + 실천 팁",
-    promptGuide:
-      "이 대본은 '오늘의 운세' 시리즈입니다. 캐릭터가 오늘 하루 특정 띠/성향에 좋은 일과 짧은 실천 팁을 전달하는 데일리 콘텐츠로 작성해주세요. 매일 챙겨보고 싶어지는 습관형 톤으로 써주세요. 대본 마지막에는 '내 사주 무료로 보러가기' 같은 CTA를 자연스럽게 포함해주세요.",
+    id: "saju",
+    label: "사주",
+    description: "오행/사주팔자/신살 등을 근거로 풀어주는 톤",
+    sajuMode: true,
+    subFormats: [
+      {
+        id: "daily",
+        label: "오늘의 운세",
+        description: "매일 챙겨보는 캐릭터의 짧은 오늘의 운세 + 실천 팁",
+        promptGuide:
+          "이 대본은 '오늘의 운세' 시리즈입니다. 캐릭터가 오늘 하루 특정 띠/성향에 좋은 일과 짧은 실천 팁을 전달하는 데일리 콘텐츠로 작성해주세요. 매일 챙겨보고 싶어지는 습관형 톤으로 써주세요. 대본 마지막에는 '내 사주 무료로 보러가기' 같은 CTA를 자연스럽게 포함해주세요.",
+      },
+      {
+        id: "element-type",
+        label: "나는 무슨 오행?",
+        description: "MBTI처럼 성격을 오행/십성에 빗댄 유형 테스트형",
+        promptGuide:
+          "이 대본은 '나는 무슨 오행?' 시리즈입니다. MBTI 유형 테스트처럼 성격이나 행동 특징을 오행(목화토금수) 또는 십성에 빗대어 소개하고, 시청자가 자신을 대입해볼 수 있도록 작성해주세요. 저장·공유하고 싶어지는 톤으로 써주세요. 대본 마지막에는 '내 사주 무료로 보러가기' 같은 CTA를 자연스럽게 포함해주세요.",
+      },
+      {
+        id: "comment-consult",
+        label: "댓글 사주 상담",
+        description: "댓글로 받은 고민에 캐릭터가 답변하는 참여형",
+        promptGuide:
+          "이 대본은 '댓글 사주 상담' 시리즈입니다. 팔로워가 댓글로 남긴 고민(연애/이직 등)에 캐릭터가 답변하는 형식으로 작성하고, 마지막에 다음 사연을 댓글로 남겨달라는 유도 문구를 포함해주세요.",
+      },
+      {
+        id: "meme",
+        label: "사주 밈/유머",
+        description: "가벼운 유머 톤의 사주 밈 형식",
+        promptGuide:
+          "이 대본은 '사주 밈/유머' 시리즈입니다. 무겁지 않고 가벼운 유머 톤으로, MZ 세대가 공감할 만한 사주 관련 밈 형식으로 작성해주세요. 대본 마지막에는 '내 사주 무료로 보러가기' 같은 CTA를 자연스럽게 포함해주세요.",
+      },
+      {
+        id: "worldview",
+        label: "캐릭터 세계관",
+        description: "단순 점괘가 아닌 캐릭터 스토리/비하인드",
+        promptGuide:
+          "이 대본은 '캐릭터 세계관/비하인드' 시리즈입니다. 단순 점괘 전달이 아니라, 캐릭터에게 스토리와 개성을 부여해서 '하늘의 이야기를 전하러 온 도령'이라는 세계관이 자연스럽게 드러나는 대본으로 작성해주세요.",
+      },
+    ],
   },
   {
-    id: "element-type",
-    label: "나는 무슨 오행?",
-    description: "MBTI처럼 성격을 오행/십성에 빗댄 유형 테스트형",
+    id: "humor",
+    label: "유머",
+    description: "가볍고 재밌는 밈/상황극 톤",
+    sajuMode: false,
     promptGuide:
-      "이 대본은 '나는 무슨 오행?' 시리즈입니다. MBTI 유형 테스트처럼 성격이나 행동 특징을 오행(목화토금수) 또는 십성에 빗대어 소개하고, 시청자가 자신을 대입해볼 수 있도록 작성해주세요. 저장·공유하고 싶어지는 톤으로 써주세요. 대본 마지막에는 '내 사주 무료로 보러가기' 같은 CTA를 자연스럽게 포함해주세요.",
+      "이 대본은 '유머' 카테고리입니다. 가볍고 재밌는 톤으로, 공감되는 밈이나 상황극 형식으로 자연스럽게 작성해주세요. 무겁지 않게, 웃음 포인트가 명확히 드러나도록 써주세요.",
   },
   {
-    id: "comment-consult",
-    label: "댓글 사주 상담",
-    description: "댓글로 받은 고민에 캐릭터가 답변하는 참여형",
+    id: "character",
+    label: "캐릭터",
+    description: "특정 캐릭터 시점의 스토리텔링",
+    sajuMode: false,
     promptGuide:
-      "이 대본은 '댓글 사주 상담' 시리즈입니다. 팔로워가 댓글로 남긴 고민(연애/이직 등)에 캐릭터가 답변하는 형식으로 작성하고, 마지막에 다음 사연을 댓글로 남겨달라는 유도 문구를 포함해주세요.",
+      "이 대본은 '캐릭터' 카테고리입니다. 특정 캐릭터의 시점에서 스토리텔링하는 톤으로 작성해주세요. 캐릭터의 개성과 세계관이 자연스럽게 드러나도록 써주세요.",
   },
   {
-    id: "meme",
-    label: "사주 밈/유머",
-    description: "가벼운 유머 톤의 사주 밈 형식",
+    id: "medical",
+    label: "의료/전문직",
+    description: "신뢰도 높은 전문가 톤의 정보 전달",
+    sajuMode: false,
     promptGuide:
-      "이 대본은 '사주 밈/유머' 시리즈입니다. 무겁지 않고 가벼운 유머 톤으로, MZ 세대가 공감할 만한 사주 관련 밈 형식으로 작성해주세요. 대본 마지막에는 '내 사주 무료로 보러가기' 같은 CTA를 자연스럽게 포함해주세요.",
+      "이 대본은 '의료/전문직' 카테고리입니다. 신뢰도 높은 전문가 톤으로, 정확성이 중요한 정보를 알기 쉽게 풀어 설명해주세요. 과장된 효능 주장이나 단정적인 진단은 피하고, 일반적인 정보 제공 성격임이 자연스럽게 드러나게 써주세요.",
   },
   {
-    id: "worldview",
-    label: "캐릭터 세계관",
-    description: "단순 점괘가 아닌 캐릭터 스토리/비하인드",
+    id: "food",
+    label: "요식업/맛집",
+    description: "현장감 있는 맛집/메뉴 소개 톤",
+    sajuMode: false,
     promptGuide:
-      "이 대본은 '캐릭터 세계관/비하인드' 시리즈입니다. 단순 점괘 전달이 아니라, 캐릭터에게 스토리와 개성을 부여해서 '하늘의 이야기를 전하러 온 도령'이라는 세계관이 자연스럽게 드러나는 대본으로 작성해주세요.",
+      "이 대본은 '요식업/맛집' 카테고리입니다. 군침 도는 비주얼과 현장감 있는 리액션 중심으로, 맛집이나 메뉴·레시피를 소개하는 톤으로 작성해주세요. 실제 방문·시식 경험처럼 생생하게 써주세요.",
   },
-] as const;
+  {
+    id: "parenting",
+    label: "육아/생활",
+    description: "친근한 톤의 육아·생활 꿀팁",
+    sajuMode: false,
+    promptGuide:
+      "이 대본은 '육아/생활' 카테고리입니다. 공감 가는 육아·생활 꿀팁을 친근한 톤으로 전달해주세요. 실천 가능한 구체적인 팁 위주로, 저장하고 싶어지는 정보성 콘텐츠로 작성해주세요.",
+  },
+  {
+    id: "beauty",
+    label: "뷰티/미용",
+    description: "비포/애프터가 드러나는 뷰티 꿀팁",
+    sajuMode: false,
+    promptGuide:
+      "이 대본은 '뷰티/미용' 카테고리입니다. 비포/애프터가 명확히 드러나는 뷰티·미용 꿀팁 톤으로 작성해주세요. 따라하고 싶어지도록 구체적인 단계로 설명해주세요.",
+  },
+  {
+    id: "fitness",
+    label: "헬스/운동",
+    description: "동기부여되는 트레이너 톤의 운동 팁",
+    sajuMode: false,
+    promptGuide:
+      "이 대본은 '헬스/운동' 카테고리입니다. 동기부여되는 트레이너 톤으로, 운동 자세나 루틴을 명확한 단계로 설명해주세요. 과장된 근거 제시 없이 실천 가능한 조언 위주로 작성해주세요.",
+  },
+  {
+    id: "realestate",
+    label: "부동산/재테크",
+    description: "신뢰감 있는 재테크 전문가 톤",
+    sajuMode: false,
+    promptGuide:
+      "이 대본은 '부동산/재테크' 카테고리입니다. 신뢰감 있는 전문가 톤으로, 숫자와 구체적 예시를 들어 설명해주세요. 투자 손실 가능성을 배제한 단정적 표현은 피해주세요.",
+  },
+  {
+    id: "fashion",
+    label: "패션",
+    description: "트렌디한 코디/스타일링 톤",
+    sajuMode: false,
+    promptGuide:
+      "이 대본은 '패션' 카테고리입니다. 트렌디하고 감각적인 톤으로, 코디나 스타일링 팁을 시각적으로 그려지게 설명해주세요.",
+  },
+  {
+    id: "travel",
+    label: "여행",
+    description: "설레는 여행 브이로그 톤",
+    sajuMode: false,
+    promptGuide:
+      "이 대본은 '여행' 카테고리입니다. 설레는 여행 브이로그 톤으로, 장소나 코스, 꿀팁을 생생한 현장감으로 설명해주세요.",
+  },
+  {
+    id: "pet",
+    label: "반려동물",
+    description: "따뜻한 보호자 톤의 반려동물 팁",
+    sajuMode: false,
+    promptGuide:
+      "이 대본은 '반려동물' 카테고리입니다. 반려동물을 사랑하는 보호자 톤으로, 훈육·건강·용품 팁을 따뜻하고 친근하게 설명해주세요.",
+  },
+  {
+    id: "interior",
+    label: "인테리어",
+    description: "따라하기 쉬운 비포/애프터 인테리어 팁",
+    sajuMode: false,
+    promptGuide:
+      "이 대본은 '인테리어' 카테고리입니다. 감각적인 비포/애프터가 드러나는 인테리어 팁 톤으로, 따라하기 쉬운 구체적인 아이디어 중심으로 설명해주세요.",
+  },
+];
 
 /**
  * Gemini가 가끔 화살표를 LaTeX 수식 표기($\rightarrow$, \to 등)로 써서
@@ -193,13 +313,20 @@ function StepOneScript({
 }) {
   const [keyword, setKeyword] = useState(initialKeyword ?? "");
   const [benchmarkContext] = useState(initialBenchmarkContext ?? "");
-  const [seriesFormatId, setSeriesFormatId] = useState<string | null>(null);
+  const [categoryId, setCategoryId] = useState<string | null>(null);
+  const [subFormatId, setSubFormatId] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
 
-  const selectedSeriesFormat = SERIES_FORMATS.find(
-    (f) => f.id === seriesFormatId
+  const selectedCategory = SERIES_CATEGORIES.find((c) => c.id === categoryId);
+  const selectedSubFormat = selectedCategory?.subFormats?.find(
+    (f) => f.id === subFormatId
   );
+
+  const selectCategory = (id: string | null) => {
+    setCategoryId(id);
+    setSubFormatId(null);
+  };
 
   const handleGenerate = async () => {
     if (!keyword.trim()) {
@@ -210,14 +337,15 @@ function StepOneScript({
     setGenerating(true);
     setError("");
 
-    const combinedContext = [selectedSeriesFormat?.promptGuide, benchmarkContext]
+    const guideText = selectedSubFormat?.promptGuide ?? selectedCategory?.promptGuide;
+    const combinedContext = [guideText, benchmarkContext]
       .filter(Boolean)
       .join("\n\n");
 
     const result = await generateScript(
       keyword.trim(),
       duration,
-      seriesFormatId !== null,
+      selectedCategory?.sajuMode ?? false,
       combinedContext || undefined
     );
 
@@ -254,39 +382,70 @@ function StepOneScript({
 
       <div className="mt-4">
         <span className="text-sm font-semibold text-slate-700">
-          콘텐츠 시리즈 (선택)
+          콘텐츠 카테고리 (선택)
         </span>
         <div className="mt-2 flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => setSeriesFormatId(null)}
+            onClick={() => selectCategory(null)}
             className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors duration-200 ${
-              seriesFormatId === null
+              categoryId === null
                 ? "border-transparent bg-gradient-to-r from-purple-600 to-blue-500 text-white"
                 : "border-slate-200 text-slate-500 hover:bg-slate-50"
             }`}
           >
             없음
           </button>
-          {SERIES_FORMATS.map((f) => (
+          {SERIES_CATEGORIES.map((c) => (
             <button
-              key={f.id}
+              key={c.id}
               type="button"
-              onClick={() => setSeriesFormatId(f.id)}
+              onClick={() => selectCategory(c.id)}
               className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors duration-200 ${
-                seriesFormatId === f.id
+                categoryId === c.id
                   ? "border-transparent bg-gradient-to-r from-purple-600 to-blue-500 text-white"
                   : "border-slate-200 text-slate-500 hover:bg-slate-50"
               }`}
             >
-              {f.label}
+              {c.label}
             </button>
           ))}
         </div>
-        {selectedSeriesFormat && (
+        {selectedCategory && (
           <p className="mt-1.5 text-xs text-slate-400">
-            {selectedSeriesFormat.description}
+            {selectedCategory.description}
           </p>
+        )}
+
+        {selectedCategory?.subFormats && (
+          <div className="mt-3 rounded-xl bg-slate-50 p-3">
+            <p className="text-[11px] font-semibold text-slate-500">
+              세부 포맷 (선택 안 해도 기본 {selectedCategory.label} 톤으로 생성돼요)
+            </p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {selectedCategory.subFormats.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() =>
+                    setSubFormatId((prev) => (prev === f.id ? null : f.id))
+                  }
+                  className={`rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors duration-200 ${
+                    subFormatId === f.id
+                      ? "border-purple-400 bg-purple-100 text-purple-700"
+                      : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+            {selectedSubFormat && (
+              <p className="mt-1.5 text-xs text-slate-400">
+                {selectedSubFormat.description}
+              </p>
+            )}
+          </div>
         )}
       </div>
 
