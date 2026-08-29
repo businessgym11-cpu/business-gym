@@ -1,13 +1,27 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Search, Bookmark, SlidersHorizontal, RotateCcw } from "lucide-react";
+import {
+  Loader2,
+  Search,
+  Bookmark,
+  SlidersHorizontal,
+  RotateCcw,
+  Flame,
+  Users,
+  TrendingUp,
+  Film,
+} from "lucide-react";
 import {
   searchVideos,
   listSavedVideos,
   saveVideo,
   unsaveVideo,
+  getSurgeVideos,
+  getTrendingNow,
   type SearchedVideo,
+  type SurgeVideo,
+  type TrendingNowVideo,
 } from "./actions";
 import {
   formatViews,
@@ -47,6 +61,40 @@ function toDetailInput(v: SearchedVideo): VideoDetailInput {
   };
 }
 
+function toSurgeDetailInput(v: SurgeVideo): VideoDetailInput {
+  return {
+    id: v.id,
+    title: v.title,
+    description: v.description,
+    thumbnailUrl: v.thumbnailUrl,
+    viewCount: v.viewCount ?? 0,
+    likeCount: null,
+    publishedAt: v.publishedAt,
+    videoUrl: v.videoUrl,
+    channelId: v.channelId,
+    channelTitle: v.channelTitle,
+    contributionTier: null,
+    performanceTier: null,
+  };
+}
+
+function toTrendingDetailInput(v: TrendingNowVideo): VideoDetailInput {
+  return {
+    id: v.id,
+    title: v.title,
+    description: v.description,
+    thumbnailUrl: v.thumbnailUrl,
+    viewCount: v.viewCount ?? 0,
+    likeCount: null,
+    publishedAt: v.publishedAt,
+    videoUrl: v.videoUrl,
+    channelId: v.channelId,
+    channelTitle: v.channelTitle,
+    contributionTier: null,
+    performanceTier: null,
+  };
+}
+
 type SortKey =
   | "viewCount"
   | "subscriberCount"
@@ -54,17 +102,41 @@ type SortKey =
   | "performanceTier"
   | "publishedAt";
 
+type SaveInput = {
+  id: string;
+  title: string;
+  thumbnailUrl: string | null;
+  channelTitle: string | null;
+  viewCount: number | null;
+  publishedAt: string | null;
+  contributionTier: string | null;
+  performanceTier: string | null;
+};
+
 export default function VideoSearchTab() {
   const [keyword, setKeyword] = useState("");
   const [results, setResults] = useState<SearchedVideo[]>([]);
   const [loading, setLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("table");
-  const [detailVideo, setDetailVideo] = useState<SearchedVideo | null>(null);
+  const [detailVideo, setDetailVideo] = useState<VideoDetailInput | null>(null);
   const [error, setError] = useState("");
 
   const [savedVideoIds, setSavedVideoIds] = useState<Set<string>>(new Set());
   const [savingId, setSavingId] = useState<string | null>(null);
+
+  const [surgeVideos, setSurgeVideos] = useState<SurgeVideo[]>([]);
+  const [surgeLoading, setSurgeLoading] = useState(true);
+  const [surgeSnapshotDate, setSurgeSnapshotDate] = useState<string | null>(null);
+  const [surgeSubFilter, setSurgeSubFilter] = useState(false);
+
+  const [trendingShorts, setTrendingShorts] = useState<TrendingNowVideo[]>([]);
+  const [trendingLongform, setTrendingLongform] = useState<TrendingNowVideo[]>([]);
+  const [trendingLoading, setTrendingLoading] = useState(true);
+  const [trendingSnapshotDate, setTrendingSnapshotDate] = useState<string | null>(
+    null
+  );
+  const [trendingTab, setTrendingTab] = useState<"shorts" | "longform">("shorts");
 
   const { history, addTerm, removeTerm } = useSearchHistory("bg_video_search_history");
 
@@ -101,6 +173,24 @@ export default function VideoSearchTab() {
     listSavedVideos().then((result) => {
       if (result.success) {
         setSavedVideoIds(new Set(result.videos.map((v) => v.youtubeVideoId)));
+      }
+    });
+    getSurgeVideos().then((result) => {
+      setSurgeLoading(false);
+      if (result.success) {
+        setSurgeVideos(result.results);
+        setSurgeSnapshotDate(result.snapshotDate);
+      }
+    });
+    getTrendingNow().then((result) => {
+      setTrendingLoading(false);
+      if (result.success) {
+        setTrendingShorts(result.shorts);
+        setTrendingLongform(result.longform);
+        setTrendingSnapshotDate(result.snapshotDate);
+        if (result.shorts.length === 0 && result.longform.length > 0) {
+          setTrendingTab("longform");
+        }
       }
     });
   }, []);
@@ -244,7 +334,7 @@ export default function VideoSearchTab() {
     });
   }, [filteredResults, sortKey, sortDir]);
 
-  const toggleSave = async (video: SearchedVideo) => {
+  const toggleSave = async (video: SaveInput) => {
     setSavingId(video.id);
     const isSaved = savedVideoIds.has(video.id);
 
@@ -488,11 +578,216 @@ export default function VideoSearchTab() {
       )}
 
       {!loading && !hasSearched && (
-        <div className="mt-10 flex flex-col items-center gap-2 rounded-xl border border-dashed border-slate-200 px-4 py-16 text-center">
-          <Search className="h-6 w-6 text-slate-300" />
-          <p className="text-sm text-slate-500">
-            키워드를 입력하면 유튜브 전체에서 영상을 찾아드려요.
+        <div className="mt-8">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Flame className="h-4 w-4 text-orange-500" />
+              <h3 className="text-sm font-bold text-slate-800">요즘 뜨는 영상</h3>
+              {surgeSnapshotDate && (
+                <span className="text-xs text-slate-400">{surgeSnapshotDate} 기준</span>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setSurgeSubFilter((v) => !v)}
+              className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors duration-200 ${
+                surgeSubFilter
+                  ? "border-purple-400 bg-purple-50 text-purple-700"
+                  : "border-slate-200 text-slate-500 hover:bg-slate-50"
+              }`}
+            >
+              <Users className="h-3.5 w-3.5" />
+              구독자 1만 이하만
+            </button>
+          </div>
+          <p className="mt-1 text-xs text-slate-400">
+            장르 무관, 구독자 대비 조회수가 가장 많이 튄 영상이에요. 매일 아침
+            자동으로 업데이트돼요.
           </p>
+
+          {surgeLoading && (
+            <div className="mt-6 flex items-center justify-center gap-2 py-12 text-sm text-slate-500">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              불러오는 중...
+            </div>
+          )}
+
+          {!surgeLoading && surgeVideos.length === 0 && (
+            <p className="mt-6 rounded-xl border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-400">
+              아직 급상승 데이터가 없어요. 내일 아침 자동으로 채워져요.
+            </p>
+          )}
+
+          {!surgeLoading && surgeVideos.length > 0 && (
+            <>
+              {(() => {
+                const shown = surgeSubFilter
+                  ? surgeVideos.filter((v) => (v.subscriberCount ?? Infinity) <= 10000)
+                  : surgeVideos;
+                if (shown.length === 0) {
+                  return (
+                    <p className="mt-6 rounded-xl border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-400">
+                      조건에 맞는 급상승 영상이 없어요.
+                    </p>
+                  );
+                }
+                return (
+                  <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+                    {shown.map((v) => (
+                      <button
+                        key={v.id}
+                        type="button"
+                        onClick={() => setDetailVideo(toSurgeDetailInput(v))}
+                        className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white text-left shadow-sm transition-shadow duration-200 hover:shadow-md"
+                      >
+                        <div className="relative aspect-video w-full overflow-hidden bg-slate-100">
+                          {v.thumbnailUrl && (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={v.thumbnailUrl}
+                              alt={v.title}
+                              className="h-full w-full object-cover"
+                            />
+                          )}
+                          {v.rank != null && (
+                            <span className="absolute left-2 top-2 flex items-center gap-1 rounded-full bg-black/60 px-2 py-1 text-[10px] font-bold text-white">
+                              <Flame className="h-3 w-3 text-orange-400" />
+                              {v.rank}위
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex flex-1 flex-col gap-1 p-2.5">
+                          <p className="line-clamp-2 text-xs font-semibold text-slate-800">
+                            {v.title}
+                          </p>
+                          <p className="truncate text-[11px] text-slate-400">
+                            {v.channelTitle}
+                          </p>
+                          <div className="mt-0.5 flex items-center justify-between text-[11px] text-slate-400">
+                            <span>{formatViews(v.viewCount)} 조회</span>
+                            <span>구독 {formatViews(v.subscriberCount)}</span>
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                );
+              })()}
+            </>
+          )}
+
+          <div className="mt-10 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-purple-500" />
+              <h3 className="text-sm font-bold text-slate-800">
+                지금 인기 있는 영상 (전체 유튜브)
+              </h3>
+              {trendingSnapshotDate && (
+                <span className="text-xs text-slate-400">
+                  {trendingSnapshotDate} 기준
+                </span>
+              )}
+            </div>
+            <div className="flex rounded-lg border border-slate-200 p-1">
+              <button
+                type="button"
+                onClick={() => setTrendingTab("shorts")}
+                className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-semibold transition-colors duration-200 ${
+                  trendingTab === "shorts"
+                    ? "bg-gradient-to-r from-purple-600 to-blue-500 text-white"
+                    : "text-slate-500 hover:bg-slate-100"
+                }`}
+              >
+                <Flame className="h-3 w-3" />
+                숏츠
+              </button>
+              <button
+                type="button"
+                onClick={() => setTrendingTab("longform")}
+                className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-semibold transition-colors duration-200 ${
+                  trendingTab === "longform"
+                    ? "bg-gradient-to-r from-purple-600 to-blue-500 text-white"
+                    : "text-slate-500 hover:bg-slate-100"
+                }`}
+              >
+                <Film className="h-3 w-3" />
+                롱폼
+              </button>
+            </div>
+          </div>
+          <p className="mt-1 text-xs text-slate-400">
+            지역(대한민국) 기준 유튜브 전체 절대적 인기 순위예요. 구독자 대비
+            상대적 급상승과는 다른 신호라, 대형 채널 위주로 나올 수 있어요.
+          </p>
+
+          {trendingLoading && (
+            <div className="mt-6 flex items-center justify-center gap-2 py-12 text-sm text-slate-500">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              불러오는 중...
+            </div>
+          )}
+
+          {!trendingLoading &&
+            (() => {
+              const shown =
+                trendingTab === "shorts" ? trendingShorts : trendingLongform;
+              if (shown.length === 0) {
+                return (
+                  <p className="mt-6 rounded-xl border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-400">
+                    {trendingTab === "shorts"
+                      ? "오늘은 순위에 든 숏츠가 없어요. 롱폼을 확인해보세요."
+                      : "아직 데이터가 없어요. 내일 아침 자동으로 채워져요."}
+                  </p>
+                );
+              }
+              return (
+                <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+                  {shown.map((v) => (
+                    <button
+                      key={v.id}
+                      type="button"
+                      onClick={() => setDetailVideo(toTrendingDetailInput(v))}
+                      className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white text-left shadow-sm transition-shadow duration-200 hover:shadow-md"
+                    >
+                      <div className="relative aspect-video w-full overflow-hidden bg-slate-100">
+                        {v.thumbnailUrl && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={v.thumbnailUrl}
+                            alt={v.title}
+                            className="h-full w-full object-cover"
+                          />
+                        )}
+                        {v.rank != null && (
+                          <span className="absolute left-2 top-2 flex items-center gap-1 rounded-full bg-black/60 px-2 py-1 text-[10px] font-bold text-white">
+                            <TrendingUp className="h-3 w-3 text-purple-300" />
+                            {v.rank}위
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex flex-1 flex-col gap-1 p-2.5">
+                        <p className="line-clamp-2 text-xs font-semibold text-slate-800">
+                          {v.title}
+                        </p>
+                        <p className="truncate text-[11px] text-slate-400">
+                          {v.channelTitle}
+                        </p>
+                        <p className="mt-0.5 text-[11px] text-slate-400">
+                          {formatViews(v.viewCount)} 조회
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              );
+            })()}
+
+          <div className="mt-10 flex flex-col items-center gap-2 rounded-xl border border-dashed border-slate-200 px-4 py-10 text-center">
+            <Search className="h-6 w-6 text-slate-300" />
+            <p className="text-sm text-slate-500">
+              키워드를 입력하면 유튜브 전체에서 영상을 찾아드려요.
+            </p>
+          </div>
         </div>
       )}
 
@@ -552,7 +847,7 @@ export default function VideoSearchTab() {
                   <td className="px-4 py-3">
                     <button
                       type="button"
-                      onClick={() => setDetailVideo(v)}
+                      onClick={() => setDetailVideo(toDetailInput(v))}
                       className="flex items-center gap-3 text-left"
                     >
                       {v.thumbnailUrl && (
@@ -639,7 +934,7 @@ export default function VideoSearchTab() {
               key={v.id}
               className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
             >
-              <button type="button" onClick={() => setDetailVideo(v)} className="text-left">
+              <button type="button" onClick={() => setDetailVideo(toDetailInput(v))} className="text-left">
                 <div className="relative aspect-video w-full overflow-hidden bg-slate-100">
                   {v.thumbnailUrl && (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -662,7 +957,7 @@ export default function VideoSearchTab() {
                 </div>
               </button>
               <div className="flex flex-1 flex-col gap-1.5 p-3">
-                <button type="button" onClick={() => setDetailVideo(v)} className="text-left">
+                <button type="button" onClick={() => setDetailVideo(toDetailInput(v))} className="text-left">
                   <p className="line-clamp-2 text-sm font-semibold text-slate-800 hover:text-purple-700">
                     {v.title}
                   </p>
@@ -704,7 +999,7 @@ export default function VideoSearchTab() {
 
       {detailVideo && (
         <VideoDetailModal
-          video={toDetailInput(detailVideo)}
+          video={detailVideo}
           isSaved={savedVideoIds.has(detailVideo.id)}
           saving={savingId === detailVideo.id}
           onToggleSave={() => toggleSave(detailVideo)}

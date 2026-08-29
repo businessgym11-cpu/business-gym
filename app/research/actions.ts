@@ -629,6 +629,134 @@ export async function searchChannels(keyword: string): Promise<SearchChannelsRes
   }
 }
 
+export type SurgeVideo = {
+  id: string;
+  keyword: string | null;
+  title: string;
+  description: string | null;
+  channelId: string | null;
+  channelTitle: string | null;
+  subscriberCount: number | null;
+  thumbnailUrl: string | null;
+  viewCount: number | null;
+  videoUrl: string;
+  publishedAt: string | null;
+  rank: number | null;
+};
+
+type GetSurgeVideosResult =
+  | { success: true; results: SurgeVideo[]; snapshotDate: string | null }
+  | { success: false; error: string };
+
+/**
+ * 장르 무관 급상승 영상 TOP10을 읽는다. n8n "Business Gym - Surge Videos
+ * Collector" 워크플로우가 매일 아침 26개 시드 키워드로 유튜브를 훑어
+ * 구독자 대비 조회수가 가장 튄 영상들을 surge_videos에 채워 넣은 결과를
+ * Supabase에서 바로 읽기만 한다(별도 웹훅 호출 불필요).
+ * /research 영상 찾기 탭의 빈 상태(검색 전)에서 "요즘 뜨는 영상" 추천으로 사용.
+ */
+export async function getSurgeVideos(): Promise<GetSurgeVideosResult> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("surge_videos")
+    .select(
+      "video_id, keyword, title, description, channel_id, channel_title, subscriber_count, thumbnail_url, view_count, video_url, published_at, rank, snapshot_date"
+    )
+    .order("rank", { ascending: true });
+
+  if (error) {
+    return { success: false, error: "급상승 영상 데이터를 불러오지 못했어요." };
+  }
+
+  return {
+    success: true,
+    snapshotDate: data && data.length > 0 ? data[0].snapshot_date : null,
+    results: (data ?? []).map((row) => ({
+      id: row.video_id,
+      keyword: row.keyword,
+      title: row.title,
+      description: row.description,
+      channelId: row.channel_id,
+      channelTitle: row.channel_title,
+      subscriberCount: row.subscriber_count,
+      thumbnailUrl: row.thumbnail_url,
+      viewCount: row.view_count,
+      videoUrl: row.video_url,
+      publishedAt: row.published_at,
+      rank: row.rank,
+    })),
+  };
+}
+
+export type TrendingNowVideo = {
+  id: string;
+  title: string;
+  description: string | null;
+  channelId: string | null;
+  channelTitle: string | null;
+  thumbnailUrl: string | null;
+  viewCount: number | null;
+  videoUrl: string;
+  publishedAt: string | null;
+  durationSeconds: number | null;
+  rank: number | null;
+};
+
+type GetTrendingNowResult =
+  | {
+      success: true;
+      shorts: TrendingNowVideo[];
+      longform: TrendingNowVideo[];
+      snapshotDate: string | null;
+    }
+  | { success: false; error: string };
+
+/**
+ * 지역(대한민국) 기준 유튜브 전체 인기 급상승 영상을 숏츠/롱폼으로 나눠 읽는다.
+ * n8n "Business Gym - Trending Now Collector" 워크플로우가 매일 아침
+ * YouTube chart=mostPopular(검색어 없는 절대적 인기 순위)로 채워 넣은 결과를
+ * Supabase에서 바로 읽기만 한다. surge_videos(구독자 대비 상대적 급상승)와는
+ * 별개 신호 — 대형 채널 위주로 나올 수 있고, 지역 인기 특성상 숏츠가
+ * 아예 없는 날도 있을 수 있다.
+ */
+export async function getTrendingNow(): Promise<GetTrendingNowResult> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("trending_now")
+    .select(
+      "video_id, title, description, channel_id, channel_title, thumbnail_url, view_count, video_url, published_at, duration_seconds, is_shorts, rank, snapshot_date"
+    )
+    .order("is_shorts", { ascending: false })
+    .order("rank", { ascending: true });
+
+  if (error) {
+    return { success: false, error: "인기 영상 데이터를 불러오지 못했어요." };
+  }
+
+  const toVideo = (row: (typeof data)[number]): TrendingNowVideo => ({
+    id: row.video_id,
+    title: row.title,
+    description: row.description,
+    channelId: row.channel_id,
+    channelTitle: row.channel_title,
+    thumbnailUrl: row.thumbnail_url,
+    viewCount: row.view_count,
+    videoUrl: row.video_url,
+    publishedAt: row.published_at,
+    durationSeconds: row.duration_seconds,
+    rank: row.rank,
+  });
+
+  return {
+    success: true,
+    snapshotDate: data && data.length > 0 ? data[0].snapshot_date : null,
+    shorts: (data ?? []).filter((row) => row.is_shorts).map(toVideo),
+    longform: (data ?? []).filter((row) => !row.is_shorts).map(toVideo),
+  };
+}
+
 type AnalyzeBenchmarkResult =
   | { success: true; analysis: string }
   | { success: false; error: string };
