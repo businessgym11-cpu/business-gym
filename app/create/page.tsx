@@ -186,6 +186,7 @@ function StepOneScript({
     const result = await generateScript(
       keyword.trim(),
       duration,
+      seriesFormatId !== null,
       combinedContext || undefined
     );
 

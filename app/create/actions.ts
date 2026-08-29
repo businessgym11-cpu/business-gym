@@ -53,6 +53,7 @@ type CheckImageToVideoStatusResult =
 export async function generateScript(
   keyword: string,
   durationSeconds: number,
+  sajuMode: boolean,
   benchmarkAnalysis?: string
 ): Promise<GenerateScriptResult> {
   const webhookUrl = process.env.N8N_GENERATE_SCRIPT_WEBHOOK_URL;
@@ -76,6 +77,7 @@ export async function generateScript(
       body: JSON.stringify({
         keyword,
         duration: durationSeconds,
+        sajuMode,
         benchmarkAnalysis,
       }),
       signal: AbortSignal.timeout(30000),
