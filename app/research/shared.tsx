@@ -18,6 +18,19 @@ export function formatViews(count: number | null): string {
   return String(count);
 }
 
+/**
+ * Gemini가 가끔 화살표 등을 LaTeX 수식 표기($\rightarrow$, \to 등)로 써서
+ * "$\rightarrow$" 같은 문자 그대로가 노출되는 경우가 있어 흔한 패턴만
+ * 사람이 읽는 기호로 치환한다.
+ */
+export function cleanAiText(text: string): string {
+  return text
+    .replace(/\$\\(rightarrow|to)\$/g, "→")
+    .replace(/\\(rightarrow|to)/g, "→")
+    .replace(/\$\\(leftarrow)\$/g, "←")
+    .replace(/\\(leftarrow)/g, "←");
+}
+
 export function formatDate(iso: string | null): string {
   if (!iso) return "-";
   const d = new Date(iso);
