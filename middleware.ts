@@ -3,7 +3,7 @@ import { updateSession } from "@/lib/supabase/middleware";
 
 // 파트 2~4: 대시보드, 트렌드 분석, AI 컨텐츠 생성 마법사, 발행은
 // 로그인 + 결제 심사 승인(approval_status === "approved")이 끝난 회원만 접근 가능
-const PROTECTED_PATHS = ["/dashboard", "/trending", "/create", "/publish", "/images"];
+const PROTECTED_PATHS = ["/dashboard", "/trending", "/create", "/publish", "/images", "/research"];
 
 export async function middleware(request: NextRequest) {
   const { response, user, approvalStatus } = await updateSession(request);
@@ -40,5 +40,6 @@ export const config = {
     "/create/:path*",
     "/publish/:path*",
     "/images/:path*",
+    "/research/:path*",
   ],
 };
