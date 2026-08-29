@@ -21,7 +21,7 @@ import {
 import {
   formatViews,
   formatDate,
-  cleanAiText,
+  AiAnalysisText,
   TierChip,
   InfoTooltip,
   METRIC_EXPLANATIONS,
@@ -305,7 +305,7 @@ export default function VideoDetailModal({
 
                 {benchmark.status === "done" && benchmark.analysis && (
                   <div className="mt-3 max-h-72 overflow-y-auto rounded-xl bg-slate-50 p-4 text-base leading-relaxed whitespace-pre-wrap text-slate-700">
-                    {cleanAiText(benchmark.analysis)}
+                    <AiAnalysisText text={benchmark.analysis} />
                   </div>
                 )}
 

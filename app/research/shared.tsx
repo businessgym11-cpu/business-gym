@@ -31,6 +31,29 @@ export function cleanAiText(text: string): string {
     .replace(/\\(leftarrow)/g, "←");
 }
 
+/**
+ * Gemini가 마크다운 **굵게** 표기로 강조한 부분을 실제 <strong>으로
+ * 렌더링한다. 별표를 그대로 노출하지 않기 위함 — 나머지는 그대로 텍스트로
+ * 둬서 whitespace-pre-wrap이 줄바꿈을 처리하게 한다.
+ */
+export function AiAnalysisText({ text }: { text: string }) {
+  const cleaned = cleanAiText(text);
+  const parts = cleaned.split(/(\*\*[^*]+\*\*)/g);
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.startsWith("**") && part.endsWith("**") ? (
+          <strong key={i} className="font-bold text-slate-900">
+            {part.slice(2, -2)}
+          </strong>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </>
+  );
+}
+
 export function formatDate(iso: string | null): string {
   if (!iso) return "-";
   const d = new Date(iso);

@@ -31,7 +31,7 @@ import {
   formatViews,
   formatDate,
   daysElapsed,
-  cleanAiText,
+  AiAnalysisText,
   TierChip,
   CONTRIBUTION_TIERS,
   PERFORMANCE_TIERS,
@@ -571,7 +571,7 @@ export default function ChannelTab({
                   ))}
                 </div>
                 <div className="mt-3 rounded-lg bg-white p-4 text-base leading-relaxed whitespace-pre-wrap text-slate-700">
-                  {cleanAiText(channelAdvice.data.analysis)}
+                  <AiAnalysisText text={channelAdvice.data.analysis} />
                 </div>
               </div>
             )}
