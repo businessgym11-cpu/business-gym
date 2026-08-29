@@ -143,6 +143,37 @@ const SERIES_FORMATS = [
   },
 ] as const;
 
+/**
+ * Gemini가 가끔 화살표를 LaTeX 수식 표기($\rightarrow$, \to 등)로 써서
+ * 문자 그대로 노출되는 경우가 있어 흔한 패턴만 치환한다.
+ */
+function cleanAiText(text: string): string {
+  return text
+    .replace(/\$\\(rightarrow|to)\$/g, "→")
+    .replace(/\\(rightarrow|to)/g, "→")
+    .replace(/\$\\(leftarrow)\$/g, "←")
+    .replace(/\\(leftarrow)/g, "←");
+}
+
+/** 마크다운 **굵게** 표기를 <strong>으로 렌더링한다. */
+function AiAnalysisText({ text }: { text: string }) {
+  const cleaned = cleanAiText(text);
+  const parts = cleaned.split(/(\*\*[^*]+\*\*)/g);
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.startsWith("**") && part.endsWith("**") ? (
+          <strong key={i} className="font-bold text-purple-950">
+            {part.slice(2, -2)}
+          </strong>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </>
+  );
+}
+
 function StepOneScript({
   script,
   setScript,
@@ -213,7 +244,7 @@ function StepOneScript({
             📊 벤치마킹 참고 자료
           </p>
           <p className="mt-1 max-h-32 overflow-y-auto whitespace-pre-wrap text-xs leading-relaxed text-purple-900">
-            {benchmarkContext}
+            <AiAnalysisText text={benchmarkContext} />
           </p>
           <p className="mt-1.5 text-[11px] text-purple-500">
             AI 대본 생성 시 이 분석을 참고해서 대본을 만들어요.
