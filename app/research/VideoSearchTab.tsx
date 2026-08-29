@@ -17,12 +17,16 @@ import {
   PERFORMANCE_TIERS,
   DATE_PRESETS,
   TierFilterGroup,
+  METRIC_EXPLANATIONS,
   RangeFilter,
   useSearchHistory,
   SearchHistoryChips,
   ViewModeToggle,
+  SortableTh,
+  TIER_RANK,
   type ShortsFilter,
   type ViewMode,
+  type SortDirection,
 } from "./shared";
 import VideoDetailModal, { type VideoDetailInput } from "./VideoDetailModal";
 
@@ -42,6 +46,13 @@ function toDetailInput(v: SearchedVideo): VideoDetailInput {
     performanceTier: v.performanceTier,
   };
 }
+
+type SortKey =
+  | "viewCount"
+  | "subscriberCount"
+  | "contributionTier"
+  | "performanceTier"
+  | "publishedAt";
 
 export default function VideoSearchTab() {
   const [keyword, setKeyword] = useState("");
@@ -73,6 +84,18 @@ export default function VideoSearchTab() {
   const [performanceSelected, setPerformanceSelected] = useState<Set<string>>(
     new Set(PERFORMANCE_TIERS)
   );
+
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<SortDirection>("desc");
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "desc" ? "asc" : "desc"));
+    } else {
+      setSortKey(key);
+      setSortDir("desc");
+    }
+  };
 
   useEffect(() => {
     listSavedVideos().then((result) => {
@@ -190,6 +213,29 @@ export default function VideoSearchTab() {
     contributionSelected,
     performanceSelected,
   ]);
+
+  const sortedResults = useMemo(() => {
+    if (!sortKey) return filteredResults;
+    const dir = sortDir === "asc" ? 1 : -1;
+    return [...filteredResults].sort((a, b) => {
+      let av: number;
+      let bv: number;
+      if (sortKey === "publishedAt") {
+        av = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
+        bv = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
+      } else if (sortKey === "contributionTier" || sortKey === "performanceTier") {
+        av = TIER_RANK[a[sortKey] ?? ""] ?? -1;
+        bv = TIER_RANK[b[sortKey] ?? ""] ?? -1;
+      } else if (sortKey === "subscriberCount") {
+        av = a.subscriberCount ?? 0;
+        bv = b.subscriberCount ?? 0;
+      } else {
+        av = a[sortKey];
+        bv = b[sortKey];
+      }
+      return (av - bv) * dir;
+    });
+  }, [filteredResults, sortKey, sortDir]);
 
   const toggleSave = async (video: SearchedVideo) => {
     setSavingId(video.id);
@@ -444,23 +490,52 @@ export default function VideoSearchTab() {
             <thead>
               <tr className="border-b border-slate-100 text-left text-xs text-slate-400">
                 <th className="px-4 py-3 font-semibold">영상</th>
-                <th className="px-4 py-3 text-right font-semibold">조회수</th>
-                <th className="px-4 py-3 text-right font-semibold">구독자</th>
-                <th className="px-4 py-3 font-semibold">주목도</th>
-                <th className="px-4 py-3 font-semibold">효율도</th>
-                <th className="px-4 py-3 font-semibold">게시일</th>
+                <SortableTh
+                  label="조회수"
+                  align="right"
+                  active={sortKey === "viewCount"}
+                  direction={sortDir}
+                  onClick={() => handleSort("viewCount")}
+                />
+                <SortableTh
+                  label="구독자"
+                  align="right"
+                  active={sortKey === "subscriberCount"}
+                  direction={sortDir}
+                  onClick={() => handleSort("subscriberCount")}
+                />
+                <SortableTh
+                  label="주목도"
+                  tooltip={METRIC_EXPLANATIONS["주목도"]}
+                  active={sortKey === "contributionTier"}
+                  direction={sortDir}
+                  onClick={() => handleSort("contributionTier")}
+                />
+                <SortableTh
+                  label="효율도"
+                  tooltip={METRIC_EXPLANATIONS["효율도"]}
+                  active={sortKey === "performanceTier"}
+                  direction={sortDir}
+                  onClick={() => handleSort("performanceTier")}
+                />
+                <SortableTh
+                  label="게시일"
+                  active={sortKey === "publishedAt"}
+                  direction={sortDir}
+                  onClick={() => handleSort("publishedAt")}
+                />
                 <th className="px-4 py-3 font-semibold"></th>
               </tr>
             </thead>
             <tbody>
-              {filteredResults.length === 0 && (
+              {sortedResults.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-400">
                     조건에 맞는 영상이 없어요.
                   </td>
                 </tr>
               )}
-              {filteredResults.map((v) => (
+              {sortedResults.map((v) => (
                 <tr key={v.id} className="border-b border-slate-50 last:border-0">
                   <td className="px-4 py-3">
                     <button
@@ -542,12 +617,12 @@ export default function VideoSearchTab() {
 
       {!loading && results.length > 0 && viewMode === "grid" && (
         <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          {filteredResults.length === 0 && (
+          {sortedResults.length === 0 && (
             <p className="col-span-full py-10 text-center text-sm text-slate-400">
               조건에 맞는 영상이 없어요.
             </p>
           )}
-          {filteredResults.map((v) => (
+          {sortedResults.map((v) => (
             <div
               key={v.id}
               className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"

@@ -7,7 +7,13 @@ import {
   type ResearchedChannel,
   type ResearchedVideo,
 } from "./actions";
-import { formatViews, formatDate, TierChip } from "./shared";
+import {
+  formatViews,
+  formatDate,
+  TierChip,
+  InfoTooltip,
+  METRIC_EXPLANATIONS,
+} from "./shared";
 
 export type VideoDetailInput = {
   id: string;
@@ -211,13 +217,19 @@ export default function VideoDetailModal({
                   <PercentBadge percent={likesPercent} />
                 </div>
                 <div className="rounded-xl bg-slate-50 p-3">
-                  <p className="text-xs text-slate-400">주목도</p>
+                  <p className="flex items-center gap-1 text-xs text-slate-400">
+                    주목도
+                    <InfoTooltip text={METRIC_EXPLANATIONS["주목도"]} />
+                  </p>
                   <div className="mt-1.5">
                     <TierChip tier={video.contributionTier} />
                   </div>
                 </div>
                 <div className="rounded-xl bg-slate-50 p-3">
-                  <p className="text-xs text-slate-400">효율도</p>
+                  <p className="flex items-center gap-1 text-xs text-slate-400">
+                    효율도
+                    <InfoTooltip text={METRIC_EXPLANATIONS["효율도"]} />
+                  </p>
                   <div className="mt-1.5">
                     <TierChip tier={video.performanceTier} />
                   </div>

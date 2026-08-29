@@ -33,9 +33,13 @@ import {
   PERFORMANCE_TIERS,
   DATE_PRESETS,
   TierFilterGroup,
+  METRIC_EXPLANATIONS,
   ViewModeToggle,
+  SortableTh,
+  TIER_RANK,
   type ShortsFilter,
   type ViewMode,
+  type SortDirection,
 } from "./shared";
 import VideoDetailModal, { type VideoDetailInput } from "./VideoDetailModal";
 
@@ -58,6 +62,8 @@ function toDetailInput(
     performanceTier: v.performanceTier,
   };
 }
+
+type SortKey = "viewCount" | "contributionTier" | "performanceTier" | "publishedAt";
 
 export default function ChannelTab({
   autoRegisterInput,
@@ -129,6 +135,18 @@ export default function ChannelTab({
     contributionSelected.size !== CONTRIBUTION_TIERS.length ||
     performanceSelected.size !== PERFORMANCE_TIERS.length;
 
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<SortDirection>("desc");
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "desc" ? "asc" : "desc"));
+    } else {
+      setSortKey(key);
+      setSortDir("desc");
+    }
+  };
+
   const filteredVideos = useMemo(() => {
     const min = minViews ? Number(minViews) : null;
     const max = maxViews ? Number(maxViews) : null;
@@ -160,6 +178,26 @@ export default function ChannelTab({
     contributionSelected,
     performanceSelected,
   ]);
+
+  const sortedVideos = useMemo(() => {
+    if (!sortKey) return filteredVideos;
+    const dir = sortDir === "asc" ? 1 : -1;
+    return [...filteredVideos].sort((a, b) => {
+      let av: number;
+      let bv: number;
+      if (sortKey === "publishedAt") {
+        av = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
+        bv = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
+      } else if (sortKey === "contributionTier" || sortKey === "performanceTier") {
+        av = TIER_RANK[a[sortKey] ?? ""] ?? -1;
+        bv = TIER_RANK[b[sortKey] ?? ""] ?? -1;
+      } else {
+        av = a[sortKey];
+        bv = b[sortKey];
+      }
+      return (av - bv) * dir;
+    });
+  }, [filteredVideos, sortKey, sortDir]);
 
   const selectChannel = async (channel: ResearchedChannel) => {
     setActiveChannel(channel);
@@ -578,22 +616,45 @@ export default function ChannelTab({
               <thead>
                 <tr className="border-b border-slate-100 text-left text-xs text-slate-400">
                   <th className="px-4 py-3 font-semibold">영상</th>
-                  <th className="px-4 py-3 text-right font-semibold">조회수</th>
-                  <th className="px-4 py-3 font-semibold">주목도</th>
-                  <th className="px-4 py-3 font-semibold">효율도</th>
-                  <th className="px-4 py-3 font-semibold">게시일</th>
+                  <SortableTh
+                    label="조회수"
+                    align="right"
+                    active={sortKey === "viewCount"}
+                    direction={sortDir}
+                    onClick={() => handleSort("viewCount")}
+                  />
+                  <SortableTh
+                    label="주목도"
+                    tooltip={METRIC_EXPLANATIONS["주목도"]}
+                    active={sortKey === "contributionTier"}
+                    direction={sortDir}
+                    onClick={() => handleSort("contributionTier")}
+                  />
+                  <SortableTh
+                    label="효율도"
+                    tooltip={METRIC_EXPLANATIONS["효율도"]}
+                    active={sortKey === "performanceTier"}
+                    direction={sortDir}
+                    onClick={() => handleSort("performanceTier")}
+                  />
+                  <SortableTh
+                    label="게시일"
+                    active={sortKey === "publishedAt"}
+                    direction={sortDir}
+                    onClick={() => handleSort("publishedAt")}
+                  />
                   <th className="px-4 py-3 font-semibold"></th>
                 </tr>
               </thead>
               <tbody>
-                {filteredVideos.length === 0 && (
+                {sortedVideos.length === 0 && (
                   <tr>
                     <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-400">
                       조건에 맞는 영상이 없어요.
                     </td>
                   </tr>
                 )}
-                {filteredVideos.map((v) => (
+                {sortedVideos.map((v) => (
                   <tr key={v.id} className="border-b border-slate-50 last:border-0">
                     <td className="px-4 py-3">
                       <button
@@ -666,12 +727,12 @@ export default function ChannelTab({
 
           {viewMode === "grid" && (
             <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-              {filteredVideos.length === 0 && (
+              {sortedVideos.length === 0 && (
                 <p className="col-span-full py-10 text-center text-sm text-slate-400">
                   조건에 맞는 영상이 없어요.
                 </p>
               )}
-              {filteredVideos.map((v) => (
+              {sortedVideos.map((v) => (
                 <div
                   key={v.id}
                   className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"

@@ -1,7 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X, List, LayoutGrid } from "lucide-react";
+import {
+  X,
+  List,
+  LayoutGrid,
+  Info,
+  ChevronsUpDown,
+  ChevronUp,
+  ChevronDown,
+} from "lucide-react";
 
 export function formatViews(count: number | null): string {
   if (count == null) return "-";
@@ -40,6 +48,24 @@ export const TIER_LABELS: Record<string, string> = {
   great: "Great",
 };
 
+export const METRIC_EXPLANATIONS: Record<string, string> = {
+  주목도: "같은 검색 결과(또는 채널) 안에서 평균 조회수 대비 이 영상이 얼마나 더 주목받았는지 보여줘요.",
+  효율도: "구독자 수 대비 조회수가 얼마나 높은지 보여줘요. 작은 채널이어도 이 값이 높으면 효율적으로 퍼진 거예요.",
+  "조회수대비 구독전환": "조회수가 구독자로 얼마나 잘 전환됐는지 보여주는 상대 지표예요.",
+  "일평균 구독전환": "채널 개설 후 하루 평균 구독자가 얼마나 빠르게 늘었는지 보여주는 상대 지표예요.",
+};
+
+export function InfoTooltip({ text }: { text: string }) {
+  return (
+    <span className="group relative inline-flex cursor-help align-middle">
+      <Info className="h-3 w-3 text-slate-300 hover:text-slate-500" />
+      <span className="pointer-events-none absolute top-full left-1/2 z-20 mt-1.5 w-48 -translate-x-1/2 rounded-lg bg-slate-800 px-2.5 py-1.5 text-[11px] font-normal leading-relaxed text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100">
+        {text}
+      </span>
+    </span>
+  );
+}
+
 export function TierChip({ tier }: { tier: string | null }) {
   if (!tier || !TIER_STYLES[tier]) {
     return <span className="text-xs text-slate-300">-</span>;
@@ -50,6 +76,51 @@ export function TierChip({ tier }: { tier: string | null }) {
     >
       {TIER_LABELS[tier]}
     </span>
+  );
+}
+
+export const TIER_RANK: Record<string, number> = {
+  worst: 0,
+  bad: 1,
+  normal: 2,
+  good: 3,
+  great: 4,
+};
+
+export type SortDirection = "asc" | "desc";
+
+export function SortableTh({
+  label,
+  active,
+  direction,
+  onClick,
+  align = "left",
+  tooltip,
+}: {
+  label: string;
+  active: boolean;
+  direction: SortDirection;
+  onClick: () => void;
+  align?: "left" | "right";
+  tooltip?: string;
+}) {
+  const Icon = !active ? ChevronsUpDown : direction === "asc" ? ChevronUp : ChevronDown;
+  return (
+    <th className={`px-4 py-3 font-semibold ${align === "right" ? "text-right" : "text-left"}`}>
+      <span className={`inline-flex items-center gap-1 ${align === "right" ? "flex-row-reverse" : ""}`}>
+        <button
+          type="button"
+          onClick={onClick}
+          className={`inline-flex items-center gap-1 transition-colors duration-150 ${
+            active ? "text-purple-700" : "text-slate-400 hover:text-slate-600"
+          }`}
+        >
+          {label}
+          <Icon className="h-3 w-3" />
+        </button>
+        {tooltip && <InfoTooltip text={tooltip} />}
+      </span>
+    </th>
   );
 }
 
@@ -79,7 +150,10 @@ export function TierFilterGroup({
 }) {
   return (
     <div>
-      <p className="text-xs font-bold text-slate-500">{label}</p>
+      <p className="flex items-center gap-1 text-xs font-bold text-slate-500">
+        {label}
+        {METRIC_EXPLANATIONS[label] && <InfoTooltip text={METRIC_EXPLANATIONS[label]} />}
+      </p>
       <div className="mt-1.5 flex flex-wrap gap-1.5">
         {tiers.map((t) => {
           const on = selected.has(t);

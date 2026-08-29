@@ -9,14 +9,25 @@ import {
   TierChip,
   DATE_PRESETS,
   TierFilterGroup,
+  METRIC_EXPLANATIONS,
   RangeFilter,
   useSearchHistory,
   SearchHistoryChips,
   ViewModeToggle,
+  SortableTh,
+  TIER_RANK,
   type ViewMode,
+  type SortDirection,
 } from "./shared";
 
 const CONVERSION_TIERS = ["bad", "normal", "good", "great"];
+
+type SortKey =
+  | "subscriberCount"
+  | "videoCount"
+  | "viewToSubTier"
+  | "dailySubTier"
+  | "createdAt";
 
 export default function ChannelSearchTab({
   onRegister,
@@ -83,6 +94,18 @@ export default function ChannelSearchTab({
     viewToSubSelected.size !== CONVERSION_TIERS.length ||
     dailySubSelected.size !== CONVERSION_TIERS.length;
 
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<SortDirection>("desc");
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "desc" ? "asc" : "desc"));
+    } else {
+      setSortKey(key);
+      setSortDir("desc");
+    }
+  };
+
   const runSearch = async (term: string) => {
     if (!term.trim()) {
       setError("검색할 주제어를 입력해주세요.");
@@ -125,6 +148,26 @@ export default function ChannelSearchTab({
       return true;
     });
   }, [results, minSubs, maxSubs, minVideos, maxVideos, datePreset, viewToSubSelected, dailySubSelected]);
+
+  const sortedResults = useMemo(() => {
+    if (!sortKey) return filteredResults;
+    const dir = sortDir === "asc" ? 1 : -1;
+    return [...filteredResults].sort((a, b) => {
+      let av: number;
+      let bv: number;
+      if (sortKey === "createdAt") {
+        av = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        bv = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      } else if (sortKey === "viewToSubTier" || sortKey === "dailySubTier") {
+        av = TIER_RANK[a[sortKey] ?? ""] ?? -1;
+        bv = TIER_RANK[b[sortKey] ?? ""] ?? -1;
+      } else {
+        av = a[sortKey];
+        bv = b[sortKey];
+      }
+      return (av - bv) * dir;
+    });
+  }, [filteredResults, sortKey, sortDir]);
 
   const handleRegister = (channel: SearchedChannel) => {
     setRegisteredIds((prev) => new Set(prev).add(channel.id));
@@ -293,23 +336,52 @@ export default function ChannelSearchTab({
             <thead>
               <tr className="border-b border-slate-100 text-left text-xs text-slate-400">
                 <th className="px-4 py-3 font-semibold">채널</th>
-                <th className="px-4 py-3 text-right font-semibold">구독자</th>
-                <th className="px-4 py-3 text-right font-semibold">영상수</th>
-                <th className="px-4 py-3 font-semibold">조회수대비 구독전환</th>
-                <th className="px-4 py-3 font-semibold">일평균 구독전환</th>
-                <th className="px-4 py-3 font-semibold">개설일</th>
+                <SortableTh
+                  label="구독자"
+                  align="right"
+                  active={sortKey === "subscriberCount"}
+                  direction={sortDir}
+                  onClick={() => handleSort("subscriberCount")}
+                />
+                <SortableTh
+                  label="영상수"
+                  align="right"
+                  active={sortKey === "videoCount"}
+                  direction={sortDir}
+                  onClick={() => handleSort("videoCount")}
+                />
+                <SortableTh
+                  label="조회수대비 구독전환"
+                  tooltip={METRIC_EXPLANATIONS["조회수대비 구독전환"]}
+                  active={sortKey === "viewToSubTier"}
+                  direction={sortDir}
+                  onClick={() => handleSort("viewToSubTier")}
+                />
+                <SortableTh
+                  label="일평균 구독전환"
+                  tooltip={METRIC_EXPLANATIONS["일평균 구독전환"]}
+                  active={sortKey === "dailySubTier"}
+                  direction={sortDir}
+                  onClick={() => handleSort("dailySubTier")}
+                />
+                <SortableTh
+                  label="개설일"
+                  active={sortKey === "createdAt"}
+                  direction={sortDir}
+                  onClick={() => handleSort("createdAt")}
+                />
                 <th className="px-4 py-3 font-semibold"></th>
               </tr>
             </thead>
             <tbody>
-              {filteredResults.length === 0 && (
+              {sortedResults.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-400">
                     조건에 맞는 채널이 없어요.
                   </td>
                 </tr>
               )}
-              {filteredResults.map((c) => (
+              {sortedResults.map((c) => (
                 <tr key={c.id} className="border-b border-slate-50 last:border-0">
                   <td className="px-4 py-3">
                     <a
@@ -375,12 +447,12 @@ export default function ChannelSearchTab({
 
       {!loading && results.length > 0 && viewMode === "grid" && (
         <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          {filteredResults.length === 0 && (
+          {sortedResults.length === 0 && (
             <p className="col-span-full py-10 text-center text-sm text-slate-400">
               조건에 맞는 채널이 없어요.
             </p>
           )}
-          {filteredResults.map((c) => (
+          {sortedResults.map((c) => (
             <div
               key={c.id}
               className="flex flex-col items-center gap-2 rounded-2xl border border-slate-200 bg-white p-4 text-center shadow-sm"
