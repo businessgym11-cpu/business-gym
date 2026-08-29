@@ -125,10 +125,12 @@ export default function VideoSearchTab() {
   const [savedVideoIds, setSavedVideoIds] = useState<Set<string>>(new Set());
   const [savingId, setSavingId] = useState<string | null>(null);
 
-  const [surgeVideos, setSurgeVideos] = useState<SurgeVideo[]>([]);
+  const [surgeShorts, setSurgeShorts] = useState<SurgeVideo[]>([]);
+  const [surgeLongform, setSurgeLongform] = useState<SurgeVideo[]>([]);
   const [surgeLoading, setSurgeLoading] = useState(true);
   const [surgeSnapshotDate, setSurgeSnapshotDate] = useState<string | null>(null);
   const [surgeSubFilter, setSurgeSubFilter] = useState(false);
+  const [surgeTab, setSurgeTab] = useState<"shorts" | "longform">("shorts");
 
   const [trendingShorts, setTrendingShorts] = useState<TrendingNowVideo[]>([]);
   const [trendingLongform, setTrendingLongform] = useState<TrendingNowVideo[]>([]);
@@ -178,8 +180,12 @@ export default function VideoSearchTab() {
     getSurgeVideos().then((result) => {
       setSurgeLoading(false);
       if (result.success) {
-        setSurgeVideos(result.results);
+        setSurgeShorts(result.shorts);
+        setSurgeLongform(result.longform);
         setSurgeSnapshotDate(result.snapshotDate);
+        if (result.shorts.length === 0 && result.longform.length > 0) {
+          setSurgeTab("longform");
+        }
       }
     });
     getTrendingNow().then((result) => {
@@ -587,18 +593,46 @@ export default function VideoSearchTab() {
                 <span className="text-xs text-slate-400">{surgeSnapshotDate} 기준</span>
               )}
             </div>
-            <button
-              type="button"
-              onClick={() => setSurgeSubFilter((v) => !v)}
-              className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors duration-200 ${
-                surgeSubFilter
-                  ? "border-purple-400 bg-purple-50 text-purple-700"
-                  : "border-slate-200 text-slate-500 hover:bg-slate-50"
-              }`}
-            >
-              <Users className="h-3.5 w-3.5" />
-              구독자 1만 이하만
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex rounded-lg border border-slate-200 p-1">
+                <button
+                  type="button"
+                  onClick={() => setSurgeTab("shorts")}
+                  className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-semibold transition-colors duration-200 ${
+                    surgeTab === "shorts"
+                      ? "bg-gradient-to-r from-purple-600 to-blue-500 text-white"
+                      : "text-slate-500 hover:bg-slate-100"
+                  }`}
+                >
+                  <Flame className="h-3 w-3" />
+                  숏츠
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSurgeTab("longform")}
+                  className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-semibold transition-colors duration-200 ${
+                    surgeTab === "longform"
+                      ? "bg-gradient-to-r from-purple-600 to-blue-500 text-white"
+                      : "text-slate-500 hover:bg-slate-100"
+                  }`}
+                >
+                  <Film className="h-3 w-3" />
+                  롱폼
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSurgeSubFilter((v) => !v)}
+                className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors duration-200 ${
+                  surgeSubFilter
+                    ? "border-purple-400 bg-purple-50 text-purple-700"
+                    : "border-slate-200 text-slate-500 hover:bg-slate-50"
+                }`}
+              >
+                <Users className="h-3.5 w-3.5" />
+                구독자 1만 이하만
+              </button>
+            </div>
           </div>
           <p className="mt-1 text-xs text-slate-400">
             장르 무관, 구독자 대비 조회수가 가장 많이 튄 영상이에요. 매일 아침
@@ -612,18 +646,19 @@ export default function VideoSearchTab() {
             </div>
           )}
 
-          {!surgeLoading && surgeVideos.length === 0 && (
+          {!surgeLoading && surgeShorts.length === 0 && surgeLongform.length === 0 && (
             <p className="mt-6 rounded-xl border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-400">
               아직 급상승 데이터가 없어요. 내일 아침 자동으로 채워져요.
             </p>
           )}
 
-          {!surgeLoading && surgeVideos.length > 0 && (
+          {!surgeLoading && (surgeShorts.length > 0 || surgeLongform.length > 0) && (
             <>
               {(() => {
+                const bucket = surgeTab === "shorts" ? surgeShorts : surgeLongform;
                 const shown = surgeSubFilter
-                  ? surgeVideos.filter((v) => (v.subscriberCount ?? Infinity) <= 10000)
-                  : surgeVideos;
+                  ? bucket.filter((v) => (v.subscriberCount ?? Infinity) <= 10000)
+                  : bucket;
                 if (shown.length === 0) {
                   return (
                     <p className="mt-6 rounded-xl border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-400">

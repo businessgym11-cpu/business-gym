@@ -641,17 +641,23 @@ export type SurgeVideo = {
   viewCount: number | null;
   videoUrl: string;
   publishedAt: string | null;
+  durationSeconds: number | null;
   rank: number | null;
 };
 
 type GetSurgeVideosResult =
-  | { success: true; results: SurgeVideo[]; snapshotDate: string | null }
+  | {
+      success: true;
+      shorts: SurgeVideo[];
+      longform: SurgeVideo[];
+      snapshotDate: string | null;
+    }
   | { success: false; error: string };
 
 /**
- * 장르 무관 급상승 영상 TOP10을 읽는다. n8n "Business Gym - Surge Videos
- * Collector" 워크플로우가 매일 아침 26개 시드 키워드로 유튜브를 훑어
- * 구독자 대비 조회수가 가장 튄 영상들을 surge_videos에 채워 넣은 결과를
+ * 장르 무관 급상승 영상 TOP10(숏츠/롱폼 각각)을 읽는다. n8n "Business Gym -
+ * Surge Videos Collector" 워크플로우가 매일 아침 26개 시드 키워드로 유튜브를
+ * 훑어 구독자 대비 조회수가 가장 튄 영상들을 surge_videos에 채워 넣은 결과를
  * Supabase에서 바로 읽기만 한다(별도 웹훅 호출 불필요).
  * /research 영상 찾기 탭의 빈 상태(검색 전)에서 "요즘 뜨는 영상" 추천으로 사용.
  */
@@ -661,31 +667,36 @@ export async function getSurgeVideos(): Promise<GetSurgeVideosResult> {
   const { data, error } = await supabase
     .from("surge_videos")
     .select(
-      "video_id, keyword, title, description, channel_id, channel_title, subscriber_count, thumbnail_url, view_count, video_url, published_at, rank, snapshot_date"
+      "video_id, keyword, title, description, channel_id, channel_title, subscriber_count, thumbnail_url, view_count, video_url, published_at, duration_seconds, is_shorts, rank, snapshot_date"
     )
+    .order("is_shorts", { ascending: false })
     .order("rank", { ascending: true });
 
   if (error) {
     return { success: false, error: "급상승 영상 데이터를 불러오지 못했어요." };
   }
 
+  const toVideo = (row: (typeof data)[number]): SurgeVideo => ({
+    id: row.video_id,
+    keyword: row.keyword,
+    title: row.title,
+    description: row.description,
+    channelId: row.channel_id,
+    channelTitle: row.channel_title,
+    subscriberCount: row.subscriber_count,
+    thumbnailUrl: row.thumbnail_url,
+    viewCount: row.view_count,
+    videoUrl: row.video_url,
+    publishedAt: row.published_at,
+    durationSeconds: row.duration_seconds,
+    rank: row.rank,
+  });
+
   return {
     success: true,
     snapshotDate: data && data.length > 0 ? data[0].snapshot_date : null,
-    results: (data ?? []).map((row) => ({
-      id: row.video_id,
-      keyword: row.keyword,
-      title: row.title,
-      description: row.description,
-      channelId: row.channel_id,
-      channelTitle: row.channel_title,
-      subscriberCount: row.subscriber_count,
-      thumbnailUrl: row.thumbnail_url,
-      viewCount: row.view_count,
-      videoUrl: row.video_url,
-      publishedAt: row.published_at,
-      rank: row.rank,
-    })),
+    shorts: (data ?? []).filter((row) => row.is_shorts).map(toVideo),
+    longform: (data ?? []).filter((row) => !row.is_shorts).map(toVideo),
   };
 }
 
