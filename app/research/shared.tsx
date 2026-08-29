@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   X,
   List,
@@ -177,22 +177,151 @@ export function TierFilterGroup({
   );
 }
 
-export function RangeFilter({
+function compactNumber(n: number): string {
+  if (n >= 100_000_000) return `${(n / 100_000_000).toFixed(1)}억`;
+  if (n >= 10_000) return `${(n / 10_000).toFixed(1)}만`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}천`;
+  return String(Math.round(n));
+}
+
+const HISTOGRAM_BUCKETS = 24;
+
+/**
+ * 조회수/구독자/좋아요처럼 값이 넓게 퍼진 지표용 범위 필터. 현재 검색
+ * 결과 분포를 막대그래프로 보여주고, 그 아래 이중 핸들 슬라이더로
+ * 드래그해서 범위를 좁힐 수 있다(값 자체가 아니라 정렬된 값의 위치
+ * 백분위로 핸들을 움직여서, 한쪽에 쏠린 분포에서도 슬라이더 전체를
+ * 고르게 쓸 수 있게 했다). 슬라이더가 양 끝에 닿으면 그쪽 경계는
+ * "제한 없음"으로 취급한다.
+ */
+export function HistogramRangeFilter({
   label,
+  values,
   min,
   max,
   onMinChange,
   onMaxChange,
 }: {
   label: string;
+  values: number[];
   min: string;
   max: string;
   onMinChange: (v: string) => void;
   onMaxChange: (v: string) => void;
 }) {
+  const sorted = useMemo(() => [...values].sort((a, b) => a - b), [values]);
+  const count = sorted.length;
+  const dataMin = sorted[0] ?? 0;
+  const dataMax = sorted[count - 1] ?? 0;
+
+  const stats = useMemo(() => {
+    if (count === 0) return { sum: 0, avg: 0, median: 0 };
+    const sum = sorted.reduce((a, b) => a + b, 0);
+    const avg = sum / count;
+    const median =
+      count % 2 === 1
+        ? sorted[(count - 1) / 2]
+        : (sorted[count / 2 - 1] + sorted[count / 2]) / 2;
+    return { sum, avg, median };
+  }, [sorted, count]);
+
+  const buckets = useMemo(() => {
+    const arr = new Array(HISTOGRAM_BUCKETS).fill(0);
+    if (count === 0) return arr;
+    if (dataMax === dataMin) {
+      arr[0] = count;
+      return arr;
+    }
+    for (const v of sorted) {
+      let idx = Math.floor(((v - dataMin) / (dataMax - dataMin)) * HISTOGRAM_BUCKETS);
+      if (idx >= HISTOGRAM_BUCKETS) idx = HISTOGRAM_BUCKETS - 1;
+      if (idx < 0) idx = 0;
+      arr[idx]++;
+    }
+    return arr;
+  }, [sorted, dataMin, dataMax, count]);
+  const maxBucket = Math.max(1, ...buckets);
+
+  const valueAtPercent = (p: number) => {
+    if (count === 0) return 0;
+    const idx = Math.round((p / 100) * (count - 1));
+    return sorted[Math.min(count - 1, Math.max(0, idx))];
+  };
+
+  const percentForValue = (v: number, fallback: number) => {
+    if (count === 0) return fallback;
+    let lo = 0;
+    let hi = count - 1;
+    let ans = count - 1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (sorted[mid] >= v) {
+        ans = mid;
+        hi = mid - 1;
+      } else {
+        lo = mid + 1;
+      }
+    }
+    return (ans / Math.max(1, count - 1)) * 100;
+  };
+
+  const minPercent = min !== "" ? percentForValue(Number(min), 0) : 0;
+  const maxPercent = max !== "" ? percentForValue(Number(max), 100) : 100;
+
   return (
     <div>
-      <p className="text-xs font-bold text-slate-500">{label}</p>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+        <p className="text-xs font-bold text-slate-500">{label}</p>
+        {count > 0 && (
+          <p className="text-[11px] text-slate-400">
+            합계 {compactNumber(stats.sum)} · 평균 {compactNumber(stats.avg)} · 중앙값{" "}
+            {compactNumber(stats.median)}
+          </p>
+        )}
+      </div>
+
+      <div className="mt-2 flex h-10 items-end gap-[2px]">
+        {buckets.map((b, i) => (
+          <div
+            key={i}
+            className="flex-1 rounded-t-sm bg-slate-200"
+            style={{ height: `${Math.max(2, (b / maxBucket) * 100)}%` }}
+          />
+        ))}
+      </div>
+
+      <div className="relative mt-1 h-5">
+        <div className="absolute left-0 right-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-slate-200" />
+        <div
+          className="absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-purple-400"
+          style={{ left: `${minPercent}%`, right: `${100 - maxPercent}%` }}
+        />
+        <input
+          type="range"
+          min={0}
+          max={100}
+          step={1}
+          value={minPercent}
+          onChange={(e) => {
+            const p = Math.min(Number(e.target.value), maxPercent);
+            onMinChange(p <= 0 ? "" : String(Math.round(valueAtPercent(p))));
+          }}
+          className="dual-range absolute inset-x-0 top-0 h-5 w-full"
+        />
+        <input
+          type="range"
+          min={0}
+          max={100}
+          step={1}
+          value={maxPercent}
+          onChange={(e) => {
+            const p = Math.max(Number(e.target.value), minPercent);
+            onMaxChange(p >= 100 ? "" : String(Math.round(valueAtPercent(p))));
+          }}
+          className="dual-range absolute inset-x-0 top-0 h-5 w-full"
+        />
+      </div>
+
       <div className="mt-1.5 flex items-center gap-2">
         <input
           type="number"
@@ -206,7 +335,7 @@ export function RangeFilter({
           type="number"
           value={max}
           onChange={(e) => onMaxChange(e.target.value)}
-          placeholder="최대"
+          placeholder={dataMax > 0 ? `${compactNumber(dataMax)}+` : "최대"}
           className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:border-purple-400 focus:outline-none"
         />
       </div>

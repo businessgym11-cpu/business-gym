@@ -37,6 +37,7 @@ import {
   ViewModeToggle,
   SortableTh,
   TIER_RANK,
+  HistogramRangeFilter,
   type ShortsFilter,
   type ViewMode,
   type SortDirection,
@@ -146,6 +147,8 @@ export default function ChannelTab({
       setSortDir("desc");
     }
   };
+
+  const viewValues = useMemo(() => videos.map((v) => v.viewCount), [videos]);
 
   const filteredVideos = useMemo(() => {
     const min = minViews ? Number(minViews) : null;
@@ -515,28 +518,18 @@ export default function ChannelTab({
 
           {showFilters && (
             <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-                <div>
-                  <p className="text-xs font-bold text-slate-500">조회수 범위</p>
-                  <div className="mt-1.5 flex items-center gap-2">
-                    <input
-                      type="number"
-                      value={minViews}
-                      onChange={(e) => setMinViews(e.target.value)}
-                      placeholder="최소"
-                      className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:border-purple-400 focus:outline-none"
-                    />
-                    <span className="text-slate-300">~</span>
-                    <input
-                      type="number"
-                      value={maxViews}
-                      onChange={(e) => setMaxViews(e.target.value)}
-                      placeholder="최대"
-                      className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:border-purple-400 focus:outline-none"
-                    />
-                  </div>
-                </div>
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                <HistogramRangeFilter
+                  label="조회수 범위"
+                  values={viewValues}
+                  min={minViews}
+                  max={maxViews}
+                  onMinChange={setMinViews}
+                  onMaxChange={setMaxViews}
+                />
+              </div>
 
+              <div className="mt-5 grid grid-cols-1 gap-5 border-t border-slate-100 pt-5 sm:grid-cols-2 lg:grid-cols-4">
                 <div>
                   <p className="text-xs font-bold text-slate-500">게시일</p>
                   <div className="mt-1.5 flex flex-wrap gap-1.5">

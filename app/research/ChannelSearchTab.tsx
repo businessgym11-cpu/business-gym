@@ -10,7 +10,7 @@ import {
   DATE_PRESETS,
   TierFilterGroup,
   METRIC_EXPLANATIONS,
-  RangeFilter,
+  HistogramRangeFilter,
   useSearchHistory,
   SearchHistoryChips,
   ViewModeToggle,
@@ -126,6 +126,9 @@ export default function ChannelSearchTab({
     setResults(result.results);
     addTerm(term.trim());
   };
+
+  const subValues = useMemo(() => results.map((c) => c.subscriberCount), [results]);
+  const videoCountValues = useMemo(() => results.map((c) => c.videoCount), [results]);
 
   const filteredResults = useMemo(() => {
     const minS = minSubs ? Number(minSubs) : null;
@@ -243,21 +246,26 @@ export default function ChannelSearchTab({
 
       {showFilters && (
         <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            <RangeFilter
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+            <HistogramRangeFilter
               label="구독자 범위"
+              values={subValues}
               min={minSubs}
               max={maxSubs}
               onMinChange={setMinSubs}
               onMaxChange={setMaxSubs}
             />
-            <RangeFilter
+            <HistogramRangeFilter
               label="영상수 범위"
+              values={videoCountValues}
               min={minVideos}
               max={maxVideos}
               onMinChange={setMinVideos}
               onMaxChange={setMaxVideos}
             />
+          </div>
+
+          <div className="mt-5 grid grid-cols-1 gap-5 border-t border-slate-100 pt-5 sm:grid-cols-3">
             <div>
               <p className="text-xs font-bold text-slate-500">개설일</p>
               <div className="mt-1.5 flex flex-wrap gap-1.5">

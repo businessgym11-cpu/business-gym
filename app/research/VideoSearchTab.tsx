@@ -18,7 +18,7 @@ import {
   DATE_PRESETS,
   TierFilterGroup,
   METRIC_EXPLANATIONS,
-  RangeFilter,
+  HistogramRangeFilter,
   useSearchHistory,
   SearchHistoryChips,
   ViewModeToggle,
@@ -170,6 +170,13 @@ export default function VideoSearchTab() {
     setResults(result.results);
     addTerm(term.trim());
   };
+
+  const viewValues = useMemo(() => results.map((v) => v.viewCount), [results]);
+  const subValues = useMemo(
+    () => results.map((v) => v.subscriberCount).filter((v): v is number => v != null),
+    [results]
+  );
+  const likeValues = useMemo(() => results.map((v) => v.likeCount), [results]);
 
   const filteredResults = useMemo(() => {
     const minV = minViews ? Number(minViews) : null;
@@ -346,29 +353,34 @@ export default function VideoSearchTab() {
 
       {showFilters && (
         <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            <RangeFilter
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            <HistogramRangeFilter
               label="조회수 범위"
+              values={viewValues}
               min={minViews}
               max={maxViews}
               onMinChange={setMinViews}
               onMaxChange={setMaxViews}
             />
-            <RangeFilter
+            <HistogramRangeFilter
               label="구독자 범위"
+              values={subValues}
               min={minSubs}
               max={maxSubs}
               onMinChange={setMinSubs}
               onMaxChange={setMaxSubs}
             />
-            <RangeFilter
+            <HistogramRangeFilter
               label="좋아요 범위"
+              values={likeValues}
               min={minLikes}
               max={maxLikes}
               onMinChange={setMinLikes}
               onMaxChange={setMaxLikes}
             />
+          </div>
 
+          <div className="mt-5 grid grid-cols-1 gap-5 border-t border-slate-100 pt-5 sm:grid-cols-3">
             <div>
               <p className="text-xs font-bold text-slate-500">게시일</p>
               <div className="mt-1.5 flex flex-wrap gap-1.5">

@@ -8,6 +8,8 @@ import {
   Film,
   Download,
   Search,
+  Users,
+  Bookmark,
   AlertTriangle,
   ArrowRight,
   Play,
@@ -31,6 +33,12 @@ const features = [
     icon: TrendingUp,
     title: "트렌드 분석",
     desc: "뭘 만들지 모르겠을 때, 요즘 뜨는 영상과 내 채널 상태를 AI가 진단해줘요.",
+  },
+  {
+    href: "#research",
+    icon: Users,
+    title: "채널 리서치",
+    desc: "채널을 등록해 추적하거나, 키워드로 영상·채널을 찾아보고 마음에 드는 건 저장해두세요.",
   },
 ];
 
@@ -144,7 +152,7 @@ export default function GuidePage() {
       </div>
 
       {/* 한눈에 보기 */}
-      <div id="overview" className="mt-10 grid grid-cols-1 gap-4 scroll-mt-20 sm:grid-cols-3">
+      <div id="overview" className="mt-10 grid grid-cols-1 gap-4 scroll-mt-20 sm:grid-cols-2 lg:grid-cols-4">
         {features.map((f) => (
           <a
             key={f.href}
@@ -339,6 +347,90 @@ export default function GuidePage() {
         </div>
       </section>
 
+      {/* ===== 채널 리서치 ===== */}
+      <section id="research" className="mt-16 scroll-mt-20">
+        <ChapterHead
+          icon={Users}
+          tag="기능 4 · 채널 리서치"
+          title="찾고, 분석하고, 저장까지 한 곳에서"
+          sub="탭 3개(채널 분석·영상 찾기·채널 찾기)로 나뉘어 있어요. 관심 채널을 추적하거나, 키워드로 영상·채널을 발굴해보세요."
+        />
+
+        <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          <StepCard num={1} title="채널 등록해서 추적하기">
+            <p>
+              채널 URL이나 @핸들을 넣고{" "}
+              <b className="text-slate-800">[채널 등록]</b>을 누르면, 최근
+              영상 최대 50개를 조회수 순으로 보여줘요.
+            </p>
+            <p>
+              영상마다 <b className="text-slate-800">주목도</b>(평균 대비
+              얼마나 튀었는지), <b className="text-slate-800">효율도</b>
+              (구독자 대비 얼마나 효율적으로 퍼졌는지) 등급이 같이 나와요.
+            </p>
+            <MockBar
+              placeholder="예: youtube.com/@채널명 또는 @핸들"
+              buttonLabel="채널 등록"
+              buttonIcon={Search}
+            />
+          </StepCard>
+
+          <StepCard num={2} title="키워드로 영상 찾기">
+            <p>
+              등록한 채널이 아니어도, 궁금한 주제를 검색하면 유튜브 전체에서
+              영상을 찾아줘요.
+            </p>
+            <p>
+              조회수·구독자·좋아요 범위, 게시일, Shorts/롱폼, Creative
+              Commons까지 <b className="text-slate-800">필터</b>로 상세하게
+              걸러볼 수 있어요.
+            </p>
+          </StepCard>
+
+          <StepCard num={3} title="주제어로 채널 발굴하기">
+            <p>
+              주제어를 입력하면 관련 채널들을 찾아줘요 — 구독자 대비 조회수
+              전환이 좋은 채널을 골라볼 수 있어요.
+            </p>
+            <p>
+              마음에 드는 채널에서 <b className="text-slate-800">[등록]</b>을
+              누르면 바로 채널 분석 탭으로 넘어가서 추적을 시작해요.
+            </p>
+          </StepCard>
+        </div>
+
+        <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h3 className="text-lg font-bold text-slate-900">
+              영상을 클릭하면 더 자세히 보여요
+            </h3>
+            <p className="mt-2 text-sm leading-relaxed text-slate-600">
+              표나 카드에서 영상을 클릭하면{" "}
+              <b className="text-slate-800">영상 정보 · 채널 정보 · 인기 영상</b>{" "}
+              3개 탭으로 된 상세 패널이 열려요. 조회수가 채널 평균보다 얼마나
+              높은지 실제 %로도 보여줘요.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h3 className="flex items-center gap-1.5 text-lg font-bold text-slate-900">
+              <Bookmark className="h-4 w-4 text-purple-600" />
+              마음에 드는 영상은 저장해두세요
+            </h3>
+            <p className="mt-2 text-sm leading-relaxed text-slate-600">
+              북마크 아이콘을 누르면 저장돼요. 우측 상단{" "}
+              <b className="text-slate-800">[수집한 영상]</b>에서 폴더를
+              만들어 정리해두고 나중에 다시 볼 수 있어요.
+            </p>
+          </div>
+        </div>
+
+        <Callout>
+          주목도·효율도 같은 등급은 정확한 값이 아니라{" "}
+          <b>평균 대비 상대적인 근사치</b>예요. 같은 채널이나 검색 결과 안에서
+          비교하는 참고용으로만 활용해주세요.
+        </Callout>
+      </section>
+
       {/* ===== FAQ ===== */}
       <section id="faq" className="mt-16 scroll-mt-20">
         <span className="inline-block rounded-full border border-slate-200 px-2.5 py-0.5 text-xs text-slate-400">
@@ -391,6 +483,18 @@ export default function GuidePage() {
               네, 최종 렌더링을 시작하기 전까지는 문장을 고쳐서 이미지를
               얼마든지 다시 만들거나 직접 업로드할 수 있어요. 단, 렌더링을
               한 번 시작하면 그 스토리보드는 더 이상 수정할 수 없어요.
+            </p>
+          </details>
+
+          <details className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <summary className="cursor-pointer list-none font-bold text-slate-800">
+              채널 리서치의 주목도·효율도는 정확한 수치인가요?
+            </summary>
+            <p className="mt-2 text-sm leading-relaxed text-slate-600">
+              아니요. 유튜브가 공식적으로 제공하는 지표가 아니라, 저희가
+              평균 조회수·구독자 수 대비로 계산한 근사 등급이에요. 같은
+              채널이나 검색 결과 안에서 상대적으로 비교하는 참고용으로
+              봐주세요.
             </p>
           </details>
         </div>
