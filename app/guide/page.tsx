@@ -2,7 +2,7 @@ import Link from "next/link";
 import {
   Clapperboard,
   ImageIcon,
-  TrendingUp,
+  Sparkles,
   Wand2,
   Upload,
   Film,
@@ -29,16 +29,10 @@ const features = [
     desc: "대본 없이, 문장 하나로 이미지를 만들고 그 이미지를 짧은 영상으로 바꿔볼 수 있어요.",
   },
   {
-    href: "#trend",
-    icon: TrendingUp,
-    title: "트렌드 분석",
-    desc: "뭘 만들지 모르겠을 때, 요즘 뜨는 영상과 내 채널 상태를 AI가 진단해줘요.",
-  },
-  {
     href: "#research",
     icon: Users,
     title: "채널 리서치",
-    desc: "채널을 등록해 추적하거나, 키워드로 영상·채널을 찾아보고 마음에 드는 건 저장해두세요.",
+    desc: "채널을 등록해 추적하거나, 키워드로 영상·채널을 찾아보고 마음에 드는 건 저장해두세요. AI 구조 분석과 내 채널 진단도 여기서 할 수 있어요.",
   },
 ];
 
@@ -152,7 +146,7 @@ export default function GuidePage() {
       </div>
 
       {/* 한눈에 보기 */}
-      <div id="overview" className="mt-10 grid grid-cols-1 gap-4 scroll-mt-20 sm:grid-cols-2 lg:grid-cols-4">
+      <div id="overview" className="mt-10 grid grid-cols-1 gap-4 scroll-mt-20 sm:grid-cols-3">
         {features.map((f) => (
           <a
             key={f.href}
@@ -291,69 +285,13 @@ export default function GuidePage() {
         </div>
       </section>
 
-      {/* ===== 트렌드 분석 ===== */}
-      <section id="trend" className="mt-16 scroll-mt-20">
-        <ChapterHead
-          icon={TrendingUp}
-          tag="기능 3 · 트렌드 분석"
-          title="뭘 만들지 모르겠다면 여기서 시작"
-          sub="검색 → 구조 분석 → 바로 대본 만들기까지 이어져요."
-        />
-
-        <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2">
-          <StepCard num={1} title="키워드로 인기 영상 찾기">
-            <p>
-              궁금한 주제를 검색하면 그 주제로 실제 잘 되고 있는 영상들을
-              찾아줘요.
-            </p>
-            <p>
-              또는 <b className="text-slate-800">[지난주 급상승 TOP10]</b>이나{" "}
-              <b className="text-slate-800">[내 채널 분석]</b> 카드를 눌러도
-              돼요.
-            </p>
-            <MockBar
-              placeholder="예: 요리, 헬스, 육아"
-              buttonLabel=""
-              buttonIcon={Search}
-            />
-          </StepCard>
-
-          <StepCard num={2} title="영상 구조 분석하기">
-            <p>
-              마음에 드는 영상 카드에서{" "}
-              <b className="text-slate-800">[구조 분석하기]</b>를 누르면 AI가
-              훅 포인트·구성·참고할 점을 설명해줘요.
-            </p>
-            <p>
-              분석 후 나오는{" "}
-              <b className="text-slate-800">[이 구조로 대본 만들기]</b>를
-              누르면 그 내용을 그대로 들고 숏츠 만들기 1단계로 넘어가요.
-            </p>
-          </StepCard>
-
-          <StepCard num={3} title="내 채널 진단받기">
-            <p>
-              유튜브 채널 주소나 @핸들만 입력하면, 구독자·조회수·업로드 주기
-              데이터를 바탕으로 AI가 조회수·매출을 올릴 구체적인 팁을
-              알려줘요.
-            </p>
-            <p className="text-slate-500">로그인 없이도 사용할 수 있어요.</p>
-            <MockBar
-              placeholder="예: youtube.com/@채널명 또는 @핸들"
-              buttonLabel="분석하기"
-              buttonIcon={Search}
-            />
-          </StepCard>
-        </div>
-      </section>
-
       {/* ===== 채널 리서치 ===== */}
       <section id="research" className="mt-16 scroll-mt-20">
         <ChapterHead
           icon={Users}
-          tag="기능 4 · 채널 리서치"
+          tag="기능 3 · 채널 리서치"
           title="찾고, 분석하고, 저장까지 한 곳에서"
-          sub="탭 3개(채널 분석·영상 찾기·채널 찾기)로 나뉘어 있어요. 관심 채널을 추적하거나, 키워드로 영상·채널을 발굴해보세요."
+          sub="탭 3개(채널 분석·영상 찾기·채널 찾기)로 나뉘어 있어요. 관심 채널을 추적하거나, 키워드로 영상·채널을 발굴하고, AI로 구조와 채널을 진단해보세요."
         />
 
         <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -420,6 +358,31 @@ export default function GuidePage() {
               북마크 아이콘을 누르면 저장돼요. 우측 상단{" "}
               <b className="text-slate-800">[수집한 영상]</b>에서 폴더를
               만들어 정리해두고 나중에 다시 볼 수 있어요.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h3 className="flex items-center gap-1.5 text-lg font-bold text-slate-900">
+              <Sparkles className="h-4 w-4 text-purple-600" />
+              영상 구조를 AI로 분석하기
+            </h3>
+            <p className="mt-2 text-sm leading-relaxed text-slate-600">
+              영상 상세 패널에서{" "}
+              <b className="text-slate-800">[AI 벤치마킹 분석하기]</b>를 누르면
+              훅 포인트·구성·참고할 점을 AI가 설명해줘요. 이어서{" "}
+              <b className="text-slate-800">[이 구조로 대본 만들기]</b>를
+              누르면 그 내용을 그대로 들고 숏츠 만들기 1단계로 넘어가요.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h3 className="flex items-center gap-1.5 text-lg font-bold text-slate-900">
+              <Sparkles className="h-4 w-4 text-purple-600" />
+              내 채널 진단받기
+            </h3>
+            <p className="mt-2 text-sm leading-relaxed text-slate-600">
+              채널 분석 탭에서 채널을 등록한 뒤{" "}
+              <b className="text-slate-800">[AI 채널 분석]</b>을 누르면,
+              업로드 주기·참여율·숏폼 비중 데이터를 바탕으로 AI가
+              조회수·매출을 올릴 구체적인 팁을 알려줘요.
             </p>
           </div>
         </div>

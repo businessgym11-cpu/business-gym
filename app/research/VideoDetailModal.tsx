@@ -1,9 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X, Loader2, ExternalLink, Bookmark, TrendingUp, TrendingDown } from "lucide-react";
+import { useRouter } from "next/navigation";
+import {
+  X,
+  Loader2,
+  ExternalLink,
+  Bookmark,
+  TrendingUp,
+  TrendingDown,
+  Sparkles,
+  ArrowRight,
+} from "lucide-react";
 import {
   registerAndFetchChannel,
+  analyzeBenchmark,
   type ResearchedChannel,
   type ResearchedVideo,
 } from "./actions";
@@ -31,6 +42,14 @@ export type VideoDetailInput = {
 };
 
 type DetailTab = "video" | "channel" | "popular";
+
+const BENCHMARK_HANDOFF_KEY = "bg_benchmark_handoff";
+
+type BenchmarkState = {
+  status: "idle" | "loading" | "done" | "error";
+  analysis?: string;
+  error?: string;
+};
 
 function PercentBadge({ percent }: { percent: number | null }) {
   if (percent === null) return null;
@@ -65,7 +84,9 @@ export default function VideoDetailModal({
   preloadedChannel?: ResearchedChannel | null;
   preloadedChannelVideos?: ResearchedVideo[];
 }) {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<DetailTab>("video");
+  const [benchmark, setBenchmark] = useState<BenchmarkState>({ status: "idle" });
   const [channel, setChannel] = useState<ResearchedChannel | null>(
     preloadedChannel ?? null
   );
@@ -90,6 +111,31 @@ export default function VideoDetailModal({
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [video.channelId]);
+
+  const handleAnalyzeBenchmark = async () => {
+    setBenchmark({ status: "loading" });
+    const result = await analyzeBenchmark({
+      title: video.title,
+      description: video.description,
+      channelTitle: video.channelTitle,
+      viewCount: video.viewCount,
+      thumbnailUrl: video.thumbnailUrl,
+    });
+    if (!result.success) {
+      setBenchmark({ status: "error", error: result.error });
+      return;
+    }
+    setBenchmark({ status: "done", analysis: result.analysis });
+  };
+
+  const handleUseAnalysis = () => {
+    if (benchmark.status !== "done" || !benchmark.analysis) return;
+    sessionStorage.setItem(
+      BENCHMARK_HANDOFF_KEY,
+      JSON.stringify({ topic: video.title, benchmarkAnalysis: benchmark.analysis })
+    );
+    router.push(`/create?topic=${encodeURIComponent(video.title)}`);
+  };
 
   const viewsPercent =
     channel?.avgViews != null && channel.avgViews > 0
@@ -240,6 +286,45 @@ export default function VideoDetailModal({
                   채널 평균 조회수·좋아요 대비 비교예요.
                 </p>
               )}
+
+              <div className="mt-4 border-t border-slate-100 pt-4">
+                <button
+                  type="button"
+                  onClick={handleAnalyzeBenchmark}
+                  disabled={benchmark.status === "loading"}
+                  className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-purple-50 py-2.5 text-sm font-semibold text-purple-700 transition-all duration-200 hover:bg-gradient-to-r hover:from-purple-600 hover:to-blue-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {benchmark.status === "loading" ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-4 w-4" />
+                  )}
+                  {benchmark.status === "done" ? "다시 분석하기" : "AI 벤치마킹 분석하기"}
+                </button>
+
+                {benchmark.status === "done" && benchmark.analysis && (
+                  <div className="mt-3 max-h-48 overflow-y-auto rounded-xl bg-slate-50 p-3 text-xs leading-relaxed whitespace-pre-wrap text-slate-600">
+                    {benchmark.analysis}
+                  </div>
+                )}
+
+                {benchmark.status === "error" && (
+                  <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-xs font-medium text-red-600">
+                    {benchmark.error}
+                  </p>
+                )}
+
+                {benchmark.status === "done" && (
+                  <button
+                    type="button"
+                    onClick={handleUseAnalysis}
+                    className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-blue-500 py-2.5 text-sm font-bold text-white shadow-sm transition-all duration-200 hover:scale-[1.02]"
+                  >
+                    이 구조로 대본 만들기
+                    <ArrowRight className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
             </div>
           )}
 

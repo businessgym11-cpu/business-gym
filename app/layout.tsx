@@ -13,7 +13,6 @@ export const metadata: Metadata = {
 
 const navItems = [
   { label: "대시보드", href: "/dashboard" },
-  { label: "트렌드 분석", href: "/trending" },
   { label: "채널 리서치", href: "/research" },
   { label: "AI 릴스 생성", href: "/create" },
   { label: "AI 이미지 생성", href: "/images" },

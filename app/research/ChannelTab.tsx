@@ -13,6 +13,7 @@ import {
   SlidersHorizontal,
   RotateCcw,
   Bookmark,
+  Sparkles,
 } from "lucide-react";
 import {
   registerAndFetchChannel,
@@ -21,8 +22,10 @@ import {
   listSavedVideos,
   saveVideo,
   unsaveVideo,
+  analyzeChannel,
   type ResearchedChannel,
   type ResearchedVideo,
+  type ChannelAnalysis,
 } from "./actions";
 import {
   formatViews,
@@ -88,6 +91,12 @@ export default function ChannelTab({
 
   const [savedVideoIds, setSavedVideoIds] = useState<Set<string>>(new Set());
   const [savingId, setSavingId] = useState<string | null>(null);
+
+  const [channelAdvice, setChannelAdvice] = useState<{
+    status: "idle" | "loading" | "done" | "error";
+    data?: ChannelAnalysis;
+    error?: string;
+  }>({ status: "idle" });
 
   const [showFilters, setShowFilters] = useState(false);
   const [minViews, setMinViews] = useState("");
@@ -206,6 +215,7 @@ export default function ChannelTab({
     setActiveChannel(channel);
     setSwitching(true);
     setError("");
+    setChannelAdvice({ status: "idle" });
     const result = await getChannelVideos(channel.id);
     setSwitching(false);
     if (result.success) {
@@ -214,6 +224,19 @@ export default function ChannelTab({
     } else {
       setError(result.error);
     }
+  };
+
+  const handleAnalyzeChannel = async () => {
+    if (!activeChannel) return;
+    setChannelAdvice({ status: "loading" });
+    const result = await analyzeChannel(
+      `https://www.youtube.com/channel/${activeChannel.youtubeChannelId}`
+    );
+    if (!result.success) {
+      setChannelAdvice({ status: "error", error: result.error });
+      return;
+    }
+    setChannelAdvice({ status: "done", data: result.data });
   };
 
   const handleRegister = async (overrideValue?: string) => {
@@ -237,6 +260,7 @@ export default function ChannelTab({
     setActiveChannel(result.channel);
     setVideos(result.videos);
     resetFilters();
+    setChannelAdvice({ status: "idle" });
     setChannels((prev) => {
       const withoutDup = prev.filter((c) => c.id !== result.channel.id);
       return [result.channel, ...withoutDup];
@@ -410,19 +434,34 @@ export default function ChannelTab({
                   )}
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={handleRefresh}
-                disabled={refreshing}
-                className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition-colors duration-200 hover:border-purple-300 hover:bg-purple-50 hover:text-purple-700 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {refreshing ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <RefreshCcw className="h-3.5 w-3.5" />
-                )}
-                최신화
-              </button>
+              <div className="flex flex-shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleAnalyzeChannel}
+                  disabled={channelAdvice.status === "loading"}
+                  className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition-colors duration-200 hover:border-purple-300 hover:bg-purple-50 hover:text-purple-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {channelAdvice.status === "loading" ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-3.5 w-3.5" />
+                  )}
+                  {channelAdvice.status === "done" ? "AI 채널 분석 다시하기" : "AI 채널 분석"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRefresh}
+                  disabled={refreshing}
+                  className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition-colors duration-200 hover:border-purple-300 hover:bg-purple-50 hover:text-purple-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {refreshing ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <RefreshCcw className="h-3.5 w-3.5" />
+                  )}
+                  최신화
+                </button>
+              </div>
             </div>
 
             <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
@@ -490,6 +529,51 @@ export default function ChannelTab({
               최근 영상 최대 50개 기준으로 집계돼요. 주목도·효율도는 정확한 값이
               아니라 이 채널 안에서의 상대적인 근사 등급이에요.
             </p>
+
+            {channelAdvice.status === "error" && (
+              <p className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
+                {channelAdvice.error}
+              </p>
+            )}
+
+            {channelAdvice.status === "done" && channelAdvice.data && (
+              <div className="mt-4 rounded-xl border border-purple-100 bg-purple-50/40 p-4">
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    {
+                      label: "평균 업로드 간격",
+                      value:
+                        channelAdvice.data.metrics.avgUploadIntervalDays != null
+                          ? `${channelAdvice.data.metrics.avgUploadIntervalDays}일`
+                          : "-",
+                    },
+                    {
+                      label: "평균 참여율",
+                      value: `${channelAdvice.data.metrics.avgEngagementRate}%`,
+                    },
+                    {
+                      label: "숏폼 비중",
+                      value: `${channelAdvice.data.metrics.shortsRatio}%`,
+                    },
+                  ].map((stat) => (
+                    <div
+                      key={stat.label}
+                      className="rounded-lg bg-white px-3 py-2.5 text-center"
+                    >
+                      <p className="text-sm font-extrabold text-purple-700">
+                        {stat.value}
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-slate-500">
+                        {stat.label}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 rounded-lg bg-white p-3 text-sm leading-relaxed whitespace-pre-wrap text-slate-700">
+                  {channelAdvice.data.analysis}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="mt-6 flex items-center justify-between gap-3">

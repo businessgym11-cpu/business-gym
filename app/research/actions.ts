@@ -628,3 +628,165 @@ export async function searchChannels(keyword: string): Promise<SearchChannelsRes
     };
   }
 }
+
+type AnalyzeBenchmarkResult =
+  | { success: true; analysis: string }
+  | { success: false; error: string };
+
+/**
+ * 영상 하나를 Gemini로 분석해서 후킹 포인트/구조/바이럴 요인/벤치마킹 포인트를
+ * 받아온다. n8n "Business Gym - Trend Benchmark Analysis" 워크플로우
+ * (제목+설명+썸네일 이미지를 Gemini에 넘겨 분석)를 호출.
+ */
+export async function analyzeBenchmark(video: {
+  title: string;
+  description: string | null;
+  channelTitle: string | null;
+  viewCount: number | null;
+  thumbnailUrl: string | null;
+}): Promise<AnalyzeBenchmarkResult> {
+  const webhookUrl = process.env.N8N_BENCHMARK_ANALYSIS_WEBHOOK_URL;
+  const secret = process.env.N8N_WEBHOOK_SECRET;
+
+  if (!webhookUrl || !secret) {
+    return {
+      success: false,
+      error:
+        "벤치마킹 분석 서비스가 아직 연결되지 않았어요. n8n 웹훅 설정을 확인해주세요.",
+    };
+  }
+
+  try {
+    const res = await fetch(webhookUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-webhook-secret": secret,
+      },
+      body: JSON.stringify({
+        title: video.title,
+        description: video.description,
+        channelTitle: video.channelTitle,
+        viewCount: video.viewCount,
+        thumbnailUrl: video.thumbnailUrl,
+      }),
+      signal: AbortSignal.timeout(30000),
+    });
+
+    if (!res.ok) {
+      return {
+        success: false,
+        error: `벤치마킹 분석에 실패했어요. (status ${res.status})`,
+      };
+    }
+
+    const data = await res.json();
+    const analysis = typeof data.analysis === "string" ? data.analysis : "";
+
+    if (!analysis) {
+      return {
+        success: false,
+        error: "AI가 빈 응답을 반환했어요. 다시 시도해주세요.",
+      };
+    }
+
+    return { success: true, analysis };
+  } catch {
+    return {
+      success: false,
+      error:
+        "벤치마킹 분석 서비스에 연결할 수 없어요. n8n 워크플로우가 켜져 있는지 확인해주세요.",
+    };
+  }
+}
+
+export type ChannelAnalysis = {
+  channel: {
+    title: string;
+    thumbnailUrl: string | null;
+    subscriberCount: number;
+    viewCount: number;
+    videoCount: number;
+  };
+  metrics: {
+    avgViews: number;
+    maxVideo: { title: string; viewCount: number } | null;
+    minVideo: { title: string; viewCount: number } | null;
+    avgUploadIntervalDays: number | null;
+    avgEngagementRate: number;
+    shortsRatio: number;
+    analyzedVideoCount: number;
+  };
+  analysis: string;
+};
+
+type AnalyzeChannelResult =
+  | { success: true; data: ChannelAnalysis }
+  | { success: false; error: string };
+
+/**
+ * 유튜브 채널 URL/핸들을 받아 공개 데이터(구독자·조회수·업로드 주기·참여율)를
+ * 분석하고 Gemini로 조회수/매출 향상 팁을 생성한다. n8n
+ * "Business Gym - Channel Analysis" 워크플로우 호출 — 로그인/OAuth 불필요,
+ * 공개 데이터만 사용.
+ */
+export async function analyzeChannel(
+  channelUrl: string
+): Promise<AnalyzeChannelResult> {
+  const webhookUrl = process.env.N8N_ANALYZE_CHANNEL_WEBHOOK_URL;
+  const secret = process.env.N8N_WEBHOOK_SECRET;
+
+  if (!webhookUrl || !secret) {
+    return {
+      success: false,
+      error: "채널 분석 서비스가 아직 연결되지 않았어요. n8n 웹훅 설정을 확인해주세요.",
+    };
+  }
+
+  try {
+    const res = await fetch(webhookUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-webhook-secret": secret,
+      },
+      body: JSON.stringify({ channelUrl }),
+      signal: AbortSignal.timeout(45000),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      return {
+        success: false,
+        error: `채널 분석에 실패했어요. (status ${res.status})`,
+      };
+    }
+
+    if (typeof data.error === "string") {
+      return { success: false, error: data.error };
+    }
+
+    if (!data.channel || typeof data.analysis !== "string" || !data.analysis) {
+      return {
+        success: false,
+        error: "AI가 빈 응답을 반환했어요. 다시 시도해주세요.",
+      };
+    }
+
+    return {
+      success: true,
+      data: {
+        channel: data.channel,
+        metrics: data.metrics,
+        analysis: data.analysis,
+      },
+    };
+  } catch {
+    return {
+      success: false,
+      error:
+        "채널 분석 서비스에 연결할 수 없어요. n8n 워크플로우가 켜져 있는지 확인해주세요.",
+    };
+  }
+}
