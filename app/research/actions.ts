@@ -518,6 +518,7 @@ export type SearchedVideo = {
   videoUrl: string;
   durationSeconds: number;
   isShorts: boolean;
+  isCC: boolean;
   subscriberCount: number | null;
   contributionTier: string;
   performanceTier: string | null;

@@ -33,7 +33,9 @@ import {
   PERFORMANCE_TIERS,
   DATE_PRESETS,
   TierFilterGroup,
+  ViewModeToggle,
   type ShortsFilter,
+  type ViewMode,
 } from "./shared";
 
 export default function ChannelTab({
@@ -46,6 +48,7 @@ export default function ChannelTab({
     null
   );
   const [videos, setVideos] = useState<ResearchedVideo[]>([]);
+  const [viewMode, setViewMode] = useState<ViewMode>("table");
 
   const [channelInput, setChannelInput] = useState("");
   const [registering, setRegistering] = useState(false);
@@ -427,21 +430,24 @@ export default function ChannelTab({
           </div>
 
           <div className="mt-6 flex items-center justify-between gap-3">
-            <button
-              type="button"
-              onClick={() => setShowFilters((v) => !v)}
-              className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors duration-200 ${
-                showFilters || filtersActive
-                  ? "border-purple-300 bg-purple-50 text-purple-700"
-                  : "border-slate-200 text-slate-600 hover:bg-slate-50"
-              }`}
-            >
-              <SlidersHorizontal className="h-3.5 w-3.5" />
-              필터
-              {filtersActive && (
-                <span className="ml-0.5 h-1.5 w-1.5 rounded-full bg-purple-500" />
-              )}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowFilters((v) => !v)}
+                className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors duration-200 ${
+                  showFilters || filtersActive
+                    ? "border-purple-300 bg-purple-50 text-purple-700"
+                    : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+                필터
+                {filtersActive && (
+                  <span className="ml-0.5 h-1.5 w-1.5 rounded-full bg-purple-500" />
+                )}
+              </button>
+              <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+            </div>
             <p className="text-xs text-slate-400">
               전체 {videos.length}개 중 {filteredVideos.length}개 표시
             </p>
@@ -544,6 +550,7 @@ export default function ChannelTab({
             </div>
           )}
 
+          {viewMode === "table" && (
           <div className="mt-3 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
             <table className="w-full min-w-[720px] text-sm">
               <thead>
@@ -629,6 +636,74 @@ export default function ChannelTab({
               </tbody>
             </table>
           </div>
+          )}
+
+          {viewMode === "grid" && (
+            <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+              {filteredVideos.length === 0 && (
+                <p className="col-span-full py-10 text-center text-sm text-slate-400">
+                  조건에 맞는 영상이 없어요.
+                </p>
+              )}
+              {filteredVideos.map((v) => (
+                <div
+                  key={v.id}
+                  className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+                >
+                  <div className="relative aspect-video w-full overflow-hidden bg-slate-100">
+                    {v.thumbnailUrl && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={v.thumbnailUrl}
+                        alt={v.title}
+                        className="h-full w-full object-cover"
+                      />
+                    )}
+                    {v.isShorts && (
+                      <span className="absolute left-2 top-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                        Shorts
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-1 flex-col gap-1.5 p-3">
+                    <p className="line-clamp-2 text-sm font-semibold text-slate-800">
+                      {v.title}
+                    </p>
+                    <div className="flex items-center gap-1.5">
+                      <TierChip tier={v.contributionTier} />
+                      <TierChip tier={v.performanceTier} />
+                    </div>
+                    <div className="mt-1 flex items-center justify-between text-xs text-slate-400">
+                      <span>{formatViews(v.viewCount)} 조회</span>
+                      <span>{formatDate(v.publishedAt)}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => toggleSave(v, activeChannel)}
+                      disabled={savingId === v.id}
+                      className={`mt-2 flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-60 ${
+                        savedVideoIds.has(v.youtubeVideoId)
+                          ? "bg-purple-50 text-purple-700"
+                          : "bg-slate-50 text-slate-500 hover:bg-slate-100"
+                      }`}
+                    >
+                      {savingId === v.id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Bookmark
+                          className="h-3.5 w-3.5"
+                          fill={
+                            savedVideoIds.has(v.youtubeVideoId) ? "currentColor" : "none"
+                          }
+                        />
+                      )}
+                      {savedVideoIds.has(v.youtubeVideoId) ? "저장됨" : "저장"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </>
       )}
 
