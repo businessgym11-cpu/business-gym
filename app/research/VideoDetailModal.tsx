@@ -303,13 +303,13 @@ export default function VideoDetailModal({
                 </button>
 
                 {benchmark.status === "done" && benchmark.analysis && (
-                  <div className="mt-3 max-h-48 overflow-y-auto rounded-xl bg-slate-50 p-3 text-xs leading-relaxed whitespace-pre-wrap text-slate-600">
+                  <div className="mt-3 max-h-72 overflow-y-auto rounded-xl bg-slate-50 p-4 text-base leading-relaxed whitespace-pre-wrap text-slate-700">
                     {benchmark.analysis}
                   </div>
                 )}
 
                 {benchmark.status === "error" && (
-                  <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-xs font-medium text-red-600">
+                  <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-600">
                     {benchmark.error}
                   </p>
                 )}

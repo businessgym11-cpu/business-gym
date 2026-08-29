@@ -560,16 +560,16 @@ export default function ChannelTab({
                       key={stat.label}
                       className="rounded-lg bg-white px-3 py-2.5 text-center"
                     >
-                      <p className="text-sm font-extrabold text-purple-700">
+                      <p className="text-base font-extrabold text-purple-700">
                         {stat.value}
                       </p>
-                      <p className="mt-0.5 text-[11px] text-slate-500">
+                      <p className="mt-0.5 text-xs text-slate-500">
                         {stat.label}
                       </p>
                     </div>
                   ))}
                 </div>
-                <div className="mt-3 rounded-lg bg-white p-3 text-sm leading-relaxed whitespace-pre-wrap text-slate-700">
+                <div className="mt-3 rounded-lg bg-white p-4 text-base leading-relaxed whitespace-pre-wrap text-slate-700">
                   {channelAdvice.data.analysis}
                 </div>
               </div>
