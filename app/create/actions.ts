@@ -136,7 +136,7 @@ export async function generateSceneImage(
         "x-webhook-secret": secret,
       },
       body: JSON.stringify({ prompt, sceneDirection, characterImageUrl }),
-      signal: AbortSignal.timeout(60000),
+      signal: AbortSignal.timeout(170000),
     });
 
     if (!res.ok) {
